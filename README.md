@@ -43,3 +43,13 @@ This project is built as a production-style full-stack application to demonstrat
 
 ## 📂 Project Structure
 
+Baat-chit-App/
+│
+├── backend/ # Node.js + Express backend
+│ └── src/
+│ └── index.js
+│
+├── frontend/ # React + Vite frontend
+│
+├── README.md
+└── package.json
