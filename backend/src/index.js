@@ -40,9 +40,10 @@ app.use("/api/groups", groupRoutes);
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
-  // Catch-all handler for React Router (fix for path-to-regexp error)
-  app.get("/*", (req, res) => {
-    res.sendFile(path.join(__dirname, "../../frontend", "dist", "index.html"));
+  // SPA fallback for client-side routing
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    return res.sendFile(path.join(__dirname, "../../frontend", "dist", "index.html"));
   });
 }
 
