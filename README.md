@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Baat-Chit
 
 A full-stack real-time chat app with direct messaging and group chat.
@@ -119,3 +120,6 @@ Frontend:
 - Auth uses HTTP-only JWT cookies.
 - CORS is configured for local frontend origins.
 - Socket server and API share the same backend server instance.
+=======
+
+>>>>>>> 517ca9d4fb09f105660835641b72001df24c5d9c
