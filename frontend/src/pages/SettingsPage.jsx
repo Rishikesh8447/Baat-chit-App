@@ -80,7 +80,7 @@ const SettingsPage = () => {
                         <p
                           className={`
                             text-[10px] mt-1.5
-                            ${message.isSent ? "text-primary-content/70" : "text-base-con devtent/70"}
+                            ${message.isSent ? "text-primary-content/70" : "text-base-content/70"}
                           `}
                         >
                           12:00 PM

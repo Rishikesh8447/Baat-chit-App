@@ -5,7 +5,7 @@ const applyTheme = (theme) => {
 };
 
 export const useThemeStore = create((set, get) => ({
-  theme: localStorage.getItem("chat-theme") || "retro",
+  theme: localStorage.getItem("chat-theme") || "dark",
 
   initializeTheme: () => {
     applyTheme(get().theme);
