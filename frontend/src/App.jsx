@@ -1,7 +1,6 @@
 import React from "react";
 import Navbar from "./components/Navbar";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useLocation } from "react-router-dom";
 import { useAuthStore } from "./store/useAuthStore";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -17,11 +16,6 @@ import { useThemeStore } from "./store/useThemeStore";
 const App = () => {
   const { authUser, checkAuth ,isCheckingAuth} = useAuthStore();
   const { theme, initializeTheme } = useThemeStore();
-  const location = useLocation();
-  const hideNavbarRoutes = ["/login", "/signup", "/forgot-password"];
-  const shouldHideNavbar =
-    hideNavbarRoutes.includes(location.pathname) ||
-    location.pathname.startsWith("/reset-password/");
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
@@ -39,7 +33,7 @@ const App = () => {
 
 
     <div data-theme={theme} className="min-h-screen bg-base-100 text-base-content">
-      {!shouldHideNavbar && <Navbar />}
+      <Navbar />
       <main className="px-0 py-0">
         <Routes>
           <Route path="/" element={authUser ?<HomePage />:<Navigate to="/login"/>} />

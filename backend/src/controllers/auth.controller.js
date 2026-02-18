@@ -142,13 +142,8 @@ export const forgotPassword = async (req, res) => {
     const frontendBaseUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     const resetLink = `${frontendBaseUrl}/reset-password/${rawResetToken}`;
 
-    // Production: integrate with email provider and send resetLink there.
-    // Development: return link so local flow works without mail service.
-    if (process.env.NODE_ENV !== "production") {
-      return res.status(200).json({ ...genericResponse, resetLink });
-    }
-
-    return res.status(200).json(genericResponse);
+    // Return resetLink directly so reset flow works without email provider setup.
+    return res.status(200).json({ ...genericResponse, resetLink });
   } catch (error) {
     console.log("Error in forgotPassword controller", error.message);
     return res.status(500).json({ message: "Internal server error" });
