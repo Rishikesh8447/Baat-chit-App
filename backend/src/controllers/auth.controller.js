@@ -139,8 +139,10 @@ export const forgotPassword = async (req, res) => {
     user.resetPasswordExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
     await user.save();
 
-    const frontendBaseUrl = process.env.FRONTEND_URL || "http://localhost:5173";
-    const resetLink = `${frontendBaseUrl}/reset-password/${rawResetToken}`;
+    const requestOrigin = req.get("origin");
+    const frontendBaseUrl = process.env.FRONTEND_URL || requestOrigin || "http://localhost:5173";
+    const baseUrl = frontendBaseUrl.replace(/\/+$/, "");
+    const resetLink = `${baseUrl}/reset-password/${rawResetToken}`;
 
     // Return resetLink directly so reset flow works without email provider setup.
     return res.status(200).json({ ...genericResponse, resetLink });

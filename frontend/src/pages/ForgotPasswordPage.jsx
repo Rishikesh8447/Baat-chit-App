@@ -12,7 +12,13 @@ const ForgotPasswordPage = () => {
     e.preventDefault();
     if (!email.trim()) return;
     const data = await forgotPassword(email.trim());
-    if (data?.resetLink) setGeneratedLink(data.resetLink);
+    if (data?.resetLink) {
+      const token = data.resetLink.split("/reset-password/")[1];
+      const finalLink = token
+        ? `${window.location.origin}/reset-password/${token}`
+        : data.resetLink;
+      setGeneratedLink(finalLink);
+    }
   };
 
   return (
@@ -58,7 +64,7 @@ const ForgotPasswordPage = () => {
         {generatedLink && (
           <div className="mt-4 rounded-lg border border-base-300 bg-base-200 p-3">
             <p className="text-sm mb-1">Reset link (dev):</p>
-            <a className="text-primary break-all text-sm" href={generatedLink}>
+            <a className="text-primary break-all text-sm" href={generatedLink} target="_blank" rel="noreferrer">
               {generatedLink}
             </a>
           </div>

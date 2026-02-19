@@ -19,6 +19,7 @@ const ChatContainer = () => {
     selectedGroup,
     editMessage,
     deleteMessage,
+    clearActiveChat,
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
@@ -136,6 +137,20 @@ const ChatContainer = () => {
     return selectedUser?.profilePic || "/avatar.png";
   };
 
+  const adminId =
+    typeof selectedGroup?.admin === "object" ? selectedGroup?.admin?._id : selectedGroup?.admin;
+  const canClearChat = !selectedGroup?._id || adminId === authUser?._id;
+
+  const handleClearChat = async () => {
+    const confirmed = window.confirm(
+      selectedGroup?._id
+        ? `Clear all messages in "${selectedGroup.name}" for everyone?`
+        : "Clear all messages in this chat?"
+    );
+    if (!confirmed) return;
+    await clearActiveChat();
+  };
+
   if (isMessagesLoading) {
     return (
       <div className="flex-1 flex flex-col overflow-auto">
@@ -151,14 +166,26 @@ const ChatContainer = () => {
       <ChatHeader />
       <div className="border-b border-base-300 px-3 py-2">
         {!isSearchOpen ? (
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setIsSearchOpen(true)}
-          >
-            <Search className="size-4" />
-            Find in chat
-          </button>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setIsSearchOpen(true)}
+            >
+              <Search className="size-4" />
+              Find in chat
+            </button>
+            {canClearChat && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm text-error"
+                onClick={handleClearChat}
+              >
+                <Trash2 className="size-4" />
+                Clear chat
+              </button>
+            )}
+          </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex-1 min-w-[180px]">
@@ -201,6 +228,16 @@ const ChatContainer = () => {
             >
               <X className="size-4" />
             </button>
+            {canClearChat && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm text-error"
+                onClick={handleClearChat}
+              >
+                <Trash2 className="size-4" />
+                Clear chat
+              </button>
+            )}
           </div>
         )}
       </div>
