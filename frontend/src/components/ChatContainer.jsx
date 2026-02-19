@@ -29,6 +29,7 @@ const ChatContainer = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchMode, setSearchMode] = useState("all");
   const [activeMatchIndex, setActiveMatchIndex] = useState(-1);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (selectedGroup?._id) {
@@ -142,13 +143,8 @@ const ChatContainer = () => {
   const canClearChat = !selectedGroup?._id || adminId === authUser?._id;
 
   const handleClearChat = async () => {
-    const confirmed = window.confirm(
-      selectedGroup?._id
-        ? `Clear all messages in "${selectedGroup.name}" for everyone?`
-        : "Clear all messages in this chat?"
-    );
-    if (!confirmed) return;
     await clearActiveChat();
+    setIsClearConfirmOpen(false);
   };
 
   if (isMessagesLoading) {
@@ -179,7 +175,7 @@ const ChatContainer = () => {
               <button
                 type="button"
                 className="btn btn-ghost btn-sm text-error"
-                onClick={handleClearChat}
+                onClick={() => setIsClearConfirmOpen(true)}
               >
                 <Trash2 className="size-4" />
                 Clear chat
@@ -232,7 +228,7 @@ const ChatContainer = () => {
               <button
                 type="button"
                 className="btn btn-ghost btn-sm text-error"
-                onClick={handleClearChat}
+                onClick={() => setIsClearConfirmOpen(true)}
               >
                 <Trash2 className="size-4" />
                 Clear chat
@@ -353,6 +349,37 @@ const ChatContainer = () => {
       </div>
 
       <MessageInput />
+
+      {isClearConfirmOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-xl border border-base-300 bg-base-100 shadow-xl">
+            <div className="px-4 py-3 border-b border-base-300">
+              <h3 className="font-semibold">Clear Chat</h3>
+            </div>
+            <div className="px-4 py-4 text-sm text-base-content/80">
+              {selectedGroup?._id
+                ? `Clear all messages in "${selectedGroup.name}" for everyone? This cannot be undone.`
+                : "Clear all messages in this chat? This cannot be undone."}
+            </div>
+            <div className="px-4 pb-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setIsClearConfirmOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-error btn-sm"
+                onClick={handleClearChat}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
