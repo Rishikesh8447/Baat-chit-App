@@ -13,6 +13,7 @@ export const useChatStore = create((set, get) => ({
   isGroupsLoading: false,
   isCreatingGroup: false,
   isMessagesLoading: false,
+  typingIndicator: null,
 
   getUsers: async (silent = false) => {
     if (!silent) set({ isUsersLoading: true });
@@ -228,6 +229,8 @@ export const useChatStore = create((set, get) => ({
     socket.off("messageUpdated");
     socket.off("messageDeleted");
     socket.off("chatCleared");
+    socket.off("typing");
+    socket.off("stopTyping");
     socket.off("groupUpdated");
     socket.off("groupRemoved");
     socket.off("groupDeleted");
@@ -237,6 +240,11 @@ export const useChatStore = create((set, get) => ({
 
       set((state) => ({
         messages: isFromOpenedChat ? [...state.messages, newMessage] : state.messages,
+        typingIndicator:
+          state.typingIndicator?.chatType === "direct" &&
+          state.typingIndicator?.senderId === newMessage.senderId
+            ? null
+            : state.typingIndicator,
         users: state.users.map((user) => {
           if (user._id !== newMessage.senderId) return user;
 
@@ -266,6 +274,11 @@ export const useChatStore = create((set, get) => ({
       if (isFromOpenedGroup) {
         set((state) => ({
           messages: [...state.messages, newMessage],
+          typingIndicator:
+            state.typingIndicator?.chatType === "group" &&
+            state.typingIndicator?.senderId === newMessage.senderId
+              ? null
+              : state.typingIndicator,
         }));
       } else {
         toast.success(`New message in ${group?.name || "group"}`);
@@ -302,9 +315,44 @@ export const useChatStore = create((set, get) => ({
         payload.groupId === selectedGroup._id;
 
       if (isOpenedDirectChat || isOpenedGroupChat) {
-        set({ messages: [] });
+        set({ messages: [], typingIndicator: null });
       }
       get().getUsers(true);
+    });
+
+    socket.on("typing", (payload) => {
+      const { selectedUser, selectedGroup } = get();
+      const isOpenedDirectChat =
+        payload?.chatType === "direct" && selectedUser?._id === payload?.senderId;
+      const isOpenedGroupChat =
+        payload?.chatType === "group" && selectedGroup?._id === payload?.groupId;
+
+      if (isOpenedDirectChat || isOpenedGroupChat) {
+        set({
+          typingIndicator: {
+            chatType: payload.chatType,
+            senderId: payload.senderId,
+            senderName: payload.senderName || "Someone",
+            groupId: payload.groupId || null,
+          },
+        });
+      }
+    });
+
+    socket.on("stopTyping", (payload) => {
+      set((state) => {
+        const sameSender = state.typingIndicator?.senderId === payload?.senderId;
+        const sameDirect = payload?.chatType === "direct" && state.typingIndicator?.chatType === "direct";
+        const sameGroup =
+          payload?.chatType === "group" &&
+          state.typingIndicator?.chatType === "group" &&
+          state.typingIndicator?.groupId === payload?.groupId;
+
+        if (sameSender && (sameDirect || sameGroup)) {
+          return { typingIndicator: null };
+        }
+        return state;
+      });
     });
 
     socket.on("groupUpdated", (updatedGroup) => {
@@ -344,11 +392,15 @@ export const useChatStore = create((set, get) => ({
     socket.off("messageUpdated");
     socket.off("messageDeleted");
     socket.off("chatCleared");
+    socket.off("typing");
+    socket.off("stopTyping");
     socket.off("groupUpdated");
     socket.off("groupRemoved");
     socket.off("groupDeleted");
   },
 
-  setSelectedUser: (selectedUser) => set({ selectedUser, selectedGroup: null }),
-  setSelectedGroup: (selectedGroup) => set({ selectedGroup, selectedUser: null }),
+  setSelectedUser: (selectedUser) =>
+    set({ selectedUser, selectedGroup: null, typingIndicator: null }),
+  setSelectedGroup: (selectedGroup) =>
+    set({ selectedGroup, selectedUser: null, typingIndicator: null }),
 }));

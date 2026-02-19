@@ -1,6 +1,7 @@
 import { Server } from "socket.io";
 import http from "http";
 import express from "express";
+import Group from "../models/group.model.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -32,6 +33,76 @@ io.on("connection", (socket) => {
 
   // io.emit() is used to send events to all the connected clients
   io.emit("getOnlineUsers", Object.keys(userSocketMap));
+
+  socket.on("typing", async (payload = {}) => {
+    const { chatType, receiverId, groupId, senderId, senderName } = payload;
+    if (!senderId) return;
+
+    if (chatType === "group" && groupId) {
+      const group = await Group.findById(groupId).select("members");
+      if (!group) return;
+
+      group.members.forEach((memberId) => {
+        const memberIdStr = memberId.toString();
+        if (memberIdStr === senderId) return;
+        const socketId = getReceiverSocketId(memberIdStr);
+        if (socketId) {
+          io.to(socketId).emit("typing", {
+            chatType: "group",
+            groupId,
+            senderId,
+            senderName,
+          });
+        }
+      });
+      return;
+    }
+
+    if (chatType === "direct" && receiverId) {
+      const receiverSocketId = getReceiverSocketId(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("typing", {
+          chatType: "direct",
+          senderId,
+          senderName,
+        });
+      }
+    }
+  });
+
+  socket.on("stopTyping", async (payload = {}) => {
+    const { chatType, receiverId, groupId, senderId } = payload;
+    if (!senderId) return;
+
+    if (chatType === "group" && groupId) {
+      const group = await Group.findById(groupId).select("members");
+      if (!group) return;
+
+      group.members.forEach((memberId) => {
+        const memberIdStr = memberId.toString();
+        if (memberIdStr === senderId) return;
+        const socketId = getReceiverSocketId(memberIdStr);
+        if (socketId) {
+          io.to(socketId).emit("stopTyping", {
+            chatType: "group",
+            groupId,
+            senderId,
+          });
+        }
+      });
+      return;
+    }
+
+    if (chatType === "direct" && receiverId) {
+      const receiverSocketId = getReceiverSocketId(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("stopTyping", {
+          chatType: "direct",
+          senderId,
+        });
+      }
+    }
+  });
 
   socket.on("disconnect", () => {
     console.log("A user disconnected", socket.id);

@@ -1,13 +1,43 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
 import { Image, Send, X } from "lucide-react";
 import toast from "react-hot-toast";
+import { useAuthStore } from "../store/useAuthStore";
 
 const MessageInput = () => {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
+  const [isTyping, setIsTyping] = useState(false);
   const fileInputRef = useRef(null);
-  const { sendMessage } = useChatStore();
+  const typingTimeoutRef = useRef(null);
+  const { sendMessage, selectedUser, selectedGroup } = useChatStore();
+  const { authUser, socket } = useAuthStore();
+
+  const emitStopTyping = () => {
+    if (!socket || !authUser || !isTyping) return;
+
+    const payload = selectedGroup?._id
+      ? {
+          chatType: "group",
+          groupId: selectedGroup._id,
+          senderId: authUser._id,
+        }
+      : {
+          chatType: "direct",
+          receiverId: selectedUser?._id,
+          senderId: authUser._id,
+        };
+
+    socket.emit("stopTyping", payload);
+    setIsTyping(false);
+  };
+
+  const scheduleStopTyping = () => {
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      emitStopTyping();
+    }, 1200);
+  };
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -33,6 +63,7 @@ const MessageInput = () => {
     if (!text.trim() && !imagePreview) return;
 
     try {
+      emitStopTyping();
       await sendMessage({
         text: text.trim(),
         image: imagePreview,
@@ -46,6 +77,46 @@ const MessageInput = () => {
       console.error("Failed to send message:", error);
     }
   };
+
+  const handleTextChange = (e) => {
+    const nextValue = e.target.value;
+    setText(nextValue);
+
+    if (!socket || !authUser) return;
+
+    if (!nextValue.trim()) {
+      emitStopTyping();
+      return;
+    }
+
+    if (!isTyping) {
+      const payload = selectedGroup?._id
+        ? {
+            chatType: "group",
+            groupId: selectedGroup._id,
+            senderId: authUser._id,
+            senderName: authUser.fullName,
+          }
+        : {
+            chatType: "direct",
+            receiverId: selectedUser?._id,
+            senderId: authUser._id,
+            senderName: authUser.fullName,
+          };
+
+      socket.emit("typing", payload);
+      setIsTyping(true);
+    }
+
+    scheduleStopTyping();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      emitStopTyping();
+    };
+  }, [selectedUser?._id, selectedGroup?._id]);
 
   return (
     <div className="p-4 w-full">
@@ -76,7 +147,7 @@ const MessageInput = () => {
             className="w-full input input-bordered rounded-lg input-sm sm:input-md"
             placeholder="Type a message..."
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={handleTextChange}
           />
           <input
             type="file"

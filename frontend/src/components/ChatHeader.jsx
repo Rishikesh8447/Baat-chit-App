@@ -7,9 +7,9 @@ const ChatHeader = () => {
   const {
     selectedUser,
     selectedGroup,
+    typingIndicator,
     setSelectedUser,
     setSelectedGroup,
-    clearActiveChat,
     leaveGroup,
     deleteGroup,
     removeGroupMember,
@@ -41,11 +41,6 @@ const ChatHeader = () => {
     await removeGroupMember(selectedGroup._id, memberId);
   };
 
-  const handleClearChat = async () => {
-    await clearActiveChat();
-    setConfirmAction(null);
-  };
-
   return (
     <div className="p-2.5 border-b border-base-300">
       <div className="flex items-center justify-between">
@@ -72,10 +67,17 @@ const ChatHeader = () => {
                 <p className="text-xs opacity-70">
                   Admin: {selectedGroup.admin?.fullName || "Group creator"}
                 </p>
+                {typingIndicator?.chatType === "group" && typingIndicator?.groupId === selectedGroup._id && (
+                  <p className="text-xs text-primary">{typingIndicator.senderName} is typing...</p>
+                )}
               </div>
             ) : (
               <p className="text-sm text-base-content/70">
-                {onlineUsers.includes(selectedUser._id) ? "Online" : "Offline"}
+                {typingIndicator?.chatType === "direct" && typingIndicator?.senderId === selectedUser._id
+                  ? `${selectedUser.fullName} is typing...`
+                  : onlineUsers.includes(selectedUser._id)
+                    ? "Online"
+                    : "Offline"}
               </p>
             )}
           </div>
@@ -100,16 +102,6 @@ const ChatHeader = () => {
               title="Leave group"
             >
               <UserMinus className="size-4" />
-            </button>
-          )}
-          {(!isGroupChat || isGroupAdmin) && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm text-error"
-              onClick={() => setConfirmAction("clear")}
-              title="Clear chat"
-            >
-              <Trash2 className="size-4" />
             </button>
           )}
           {isGroupAdmin && (
@@ -192,21 +184,13 @@ const ChatHeader = () => {
           <div className="w-full max-w-md rounded-xl border border-base-300 bg-base-100 shadow-xl">
             <div className="px-4 py-3 border-b border-base-300">
               <h3 className="font-semibold">
-                {confirmAction === "delete"
-                  ? "Delete Group"
-                  : confirmAction === "leave"
-                    ? "Leave Group"
-                    : "Clear Chat"}
+                {confirmAction === "delete" ? "Delete Group" : "Leave Group"}
               </h3>
             </div>
             <div className="px-4 py-4 text-sm text-base-content/80">
               {confirmAction === "delete"
                 ? `Delete "${selectedGroup.name}" for all members? This cannot be undone.`
-                : confirmAction === "leave"
-                  ? `Leave group "${selectedGroup.name}"?`
-                  : isGroupChat
-                    ? `Clear all messages in "${selectedGroup.name}" for every member? This cannot be undone.`
-                    : `Clear all messages in this chat? This cannot be undone.`}
+                : `Leave group "${selectedGroup.name}"?`}
             </div>
             <div className="px-4 pb-4 flex justify-end gap-2">
               <button
@@ -218,22 +202,10 @@ const ChatHeader = () => {
               </button>
               <button
                 type="button"
-                className={`btn btn-sm ${
-                  confirmAction === "delete" || confirmAction === "clear" ? "btn-error" : "btn-primary"
-                }`}
-                onClick={
-                  confirmAction === "delete"
-                    ? handleDeleteGroup
-                    : confirmAction === "leave"
-                      ? handleLeaveGroup
-                      : handleClearChat
-                }
+                className={`btn btn-sm ${confirmAction === "delete" ? "btn-error" : "btn-primary"}`}
+                onClick={confirmAction === "delete" ? handleDeleteGroup : handleLeaveGroup}
               >
-                {confirmAction === "delete"
-                  ? "Delete"
-                  : confirmAction === "leave"
-                    ? "Leave"
-                    : "Clear"}
+                {confirmAction === "delete" ? "Delete" : "Leave"}
               </button>
             </div>
           </div>
