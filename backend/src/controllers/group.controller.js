@@ -227,3 +227,27 @@ export const removeGroupMember = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+export const clearGroupMessages = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const myId = req.user._id.toString();
+
+    const group = await Group.findById(groupId);
+    if (!group) {
+      return res.status(404).json({ message: "Group not found" });
+    }
+
+    if (group.admin.toString() !== myId) {
+      return res.status(403).json({ message: "Only group admin can clear chat" });
+    }
+
+    await Message.deleteMany({ groupId, chatType: "group" });
+    emitToGroupMembers(group.members, "chatCleared", { chatType: "group", groupId });
+
+    return res.status(200).json({ message: "Group chat cleared successfully" });
+  } catch (error) {
+    console.error("Error in clearGroupMessages:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};

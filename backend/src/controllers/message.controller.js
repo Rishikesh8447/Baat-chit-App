@@ -250,3 +250,31 @@ const senderSocketId = getReceiverSocketId(message.senderId.toString());
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+export const clearDirectChat = async (req, res) => {
+  try {
+    const myId = req.user._id.toString();
+    const { id: otherUserId } = req.params;
+
+    await Message.deleteMany({
+      $or: [
+        { senderId: myId, receiverId: otherUserId, chatType: "direct" },
+        { senderId: otherUserId, receiverId: myId, chatType: "direct" },
+        { senderId: myId, receiverId: otherUserId, chatType: { $exists: false } },
+        { senderId: otherUserId, receiverId: myId, chatType: { $exists: false } },
+      ],
+    });
+
+    const payload = { chatType: "direct", userA: myId, userB: otherUserId };
+    const mySocketId = getReceiverSocketId(myId);
+    const otherSocketId = getReceiverSocketId(otherUserId);
+
+    if (mySocketId) io.to(mySocketId).emit("chatCleared", payload);
+    if (otherSocketId) io.to(otherSocketId).emit("chatCleared", payload);
+
+    return res.status(200).json({ message: "Chat cleared successfully" });
+  } catch (error) {
+    console.error("Error in clearDirectChat:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};

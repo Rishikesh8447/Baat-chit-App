@@ -1,6 +1,7 @@
 import express from "express";
 import {protectRoute} from "../middlewares/auth.middleware.js";
 import {
+  clearDirectChat,
   deleteMessage,
   editMessage,
   getUsersForSidebar,
@@ -18,6 +19,7 @@ router.get("/:id",protectRoute,getMessages);
 
 router.post("/send/:id",protectRoute,sendMessage)
 router.put("/seen/:id", protectRoute, markMessagesAsSeen);
+router.delete("/chat/:id", protectRoute, clearDirectChat);
 router.patch("/:id", protectRoute, editMessage);
 router.delete("/:id", protectRoute, deleteMessage);
 

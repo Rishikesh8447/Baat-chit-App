@@ -21,13 +21,10 @@ const Sidebar = () => {
     subscribeToMessages,
     unsubscribeFromMessages,
   } = useChatStore();
-
-  const { onlineUsers = [], authUser } = useAuthStore();
-  const [showOnlineOnly, setShowOnlineOnly] = useState(false);
+  const { onlineUsers = [] } = useAuthStore();
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedMemberIds, setSelectedMemberIds] = useState([]);
-  const onlineContactsCount = onlineUsers.filter((id) => id !== authUser?._id).length;
 
   useEffect(() => {
     getUsers();
@@ -44,9 +41,7 @@ const Sidebar = () => {
     return () => unsubscribeFromMessages();
   }, [subscribeToMessages, unsubscribeFromMessages]);
 
-  const filteredUsers = showOnlineOnly
-    ? users.filter((user) => onlineUsers.includes(user._id))
-    : users;
+  const filteredUsers = users;
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) return;
@@ -76,21 +71,10 @@ const Sidebar = () => {
           <Users className="size-6" />
           <span className="font-medium hidden lg:block">Contacts</span>
         </div>
-        {/* TODO: Online filter toggle */}
-        <div className="mt-3 hidden lg:flex items-center gap-2">
-          <label className="cursor-pointer flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showOnlineOnly}
-              onChange={(e) => setShowOnlineOnly(e.target.checked)}
-              className="checkbox checkbox-sm"
-            />
-            <span className="text-sm">Show online only</span>
-          </label>
-          <span className="text-xs text-zinc-500">({onlineContactsCount} online)</span>
+        <div className="mt-3 hidden lg:flex justify-end">
           <button
             type="button"
-            className="btn btn-xs btn-ghost ml-auto"
+            className="btn btn-xs btn-ghost"
             onClick={() => setIsCreateGroupOpen(true)}
           >
             <Plus className="size-3.5" />

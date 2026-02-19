@@ -9,6 +9,7 @@ const ChatHeader = () => {
     selectedGroup,
     setSelectedUser,
     setSelectedGroup,
+    clearActiveChat,
     leaveGroup,
     deleteGroup,
     removeGroupMember,
@@ -38,6 +39,11 @@ const ChatHeader = () => {
   const handleRemoveMember = async (memberId) => {
     if (!selectedGroup?._id) return;
     await removeGroupMember(selectedGroup._id, memberId);
+  };
+
+  const handleClearChat = async () => {
+    await clearActiveChat();
+    setConfirmAction(null);
   };
 
   return (
@@ -94,6 +100,16 @@ const ChatHeader = () => {
               title="Leave group"
             >
               <UserMinus className="size-4" />
+            </button>
+          )}
+          {(!isGroupChat || isGroupAdmin) && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm text-error"
+              onClick={() => setConfirmAction("clear")}
+              title="Clear chat"
+            >
+              <Trash2 className="size-4" />
             </button>
           )}
           {isGroupAdmin && (
@@ -171,18 +187,26 @@ const ChatHeader = () => {
         </div>
       )}
 
-      {isGroupChat && confirmAction && (
+      {confirmAction && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-xl border border-base-300 bg-base-100 shadow-xl">
             <div className="px-4 py-3 border-b border-base-300">
               <h3 className="font-semibold">
-                {confirmAction === "delete" ? "Delete Group" : "Leave Group"}
+                {confirmAction === "delete"
+                  ? "Delete Group"
+                  : confirmAction === "leave"
+                    ? "Leave Group"
+                    : "Clear Chat"}
               </h3>
             </div>
             <div className="px-4 py-4 text-sm text-base-content/80">
               {confirmAction === "delete"
                 ? `Delete "${selectedGroup.name}" for all members? This cannot be undone.`
-                : `Leave group "${selectedGroup.name}"?`}
+                : confirmAction === "leave"
+                  ? `Leave group "${selectedGroup.name}"?`
+                  : isGroupChat
+                    ? `Clear all messages in "${selectedGroup.name}" for every member? This cannot be undone.`
+                    : `Clear all messages in this chat? This cannot be undone.`}
             </div>
             <div className="px-4 pb-4 flex justify-end gap-2">
               <button
@@ -194,10 +218,22 @@ const ChatHeader = () => {
               </button>
               <button
                 type="button"
-                className={`btn btn-sm ${confirmAction === "delete" ? "btn-error" : "btn-primary"}`}
-                onClick={confirmAction === "delete" ? handleDeleteGroup : handleLeaveGroup}
+                className={`btn btn-sm ${
+                  confirmAction === "delete" || confirmAction === "clear" ? "btn-error" : "btn-primary"
+                }`}
+                onClick={
+                  confirmAction === "delete"
+                    ? handleDeleteGroup
+                    : confirmAction === "leave"
+                      ? handleLeaveGroup
+                      : handleClearChat
+                }
               >
-                {confirmAction === "delete" ? "Delete" : "Leave"}
+                {confirmAction === "delete"
+                  ? "Delete"
+                  : confirmAction === "leave"
+                    ? "Leave"
+                    : "Clear"}
               </button>
             </div>
           </div>

@@ -198,6 +198,26 @@ export const useChatStore = create((set, get) => ({
       toast.error(error?.response?.data?.message || "Failed to delete message");
     }
   },
+  clearActiveChat: async () => {
+    const { selectedUser, selectedGroup } = get();
+    if (!selectedUser && !selectedGroup) return;
+
+    try {
+      if (selectedGroup?._id) {
+        const res = await axiosInstance.delete(`/groups/${selectedGroup._id}/messages`);
+        set({ messages: [] });
+        toast.success(res.data?.message || "Group chat cleared");
+      } else if (selectedUser?._id) {
+        const res = await axiosInstance.delete(`/messages/chat/${selectedUser._id}`);
+        set({ messages: [] });
+        toast.success(res.data?.message || "Chat cleared");
+      }
+
+      get().getUsers(true);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to clear chat");
+    }
+  },
 
   subscribeToMessages: () => {
     const socket = useAuthStore.getState().socket;
@@ -207,6 +227,7 @@ export const useChatStore = create((set, get) => ({
     socket.off("newGroupMessage");
     socket.off("messageUpdated");
     socket.off("messageDeleted");
+    socket.off("chatCleared");
     socket.off("groupUpdated");
     socket.off("groupRemoved");
     socket.off("groupDeleted");
@@ -269,6 +290,23 @@ export const useChatStore = create((set, get) => ({
       get().getUsers(true);
     });
 
+    socket.on("chatCleared", (payload) => {
+      const { selectedUser, selectedGroup } = get();
+      const isOpenedDirectChat =
+        payload?.chatType === "direct" &&
+        selectedUser?._id &&
+        [payload.userA, payload.userB].includes(selectedUser._id);
+      const isOpenedGroupChat =
+        payload?.chatType === "group" &&
+        selectedGroup?._id &&
+        payload.groupId === selectedGroup._id;
+
+      if (isOpenedDirectChat || isOpenedGroupChat) {
+        set({ messages: [] });
+      }
+      get().getUsers(true);
+    });
+
     socket.on("groupUpdated", (updatedGroup) => {
       set((state) => ({
         groups: state.groups.map((group) =>
@@ -305,6 +343,7 @@ export const useChatStore = create((set, get) => ({
     socket.off("newGroupMessage");
     socket.off("messageUpdated");
     socket.off("messageDeleted");
+    socket.off("chatCleared");
     socket.off("groupUpdated");
     socket.off("groupRemoved");
     socket.off("groupDeleted");
