@@ -18,6 +18,8 @@ import { app, initializeSocketServer, server } from "./lib/socket.js";
 const PORT = env.port;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const frontendDistPath = path.resolve(__dirname, "../../frontend/dist");
+const frontendIndexPath = path.resolve(frontendDistPath, "index.html");
 
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "10mb", strict: true }));
@@ -42,12 +44,11 @@ if (env.enableE2ETests) {
 }
 
 if (env.nodeEnv === "production") {
-  app.use(express.static(path.join(__dirname, "../../frontend/dist")));
+  console.log(`Serving frontend static files from: ${frontendDistPath}`);
+  app.use(express.static(frontendDistPath));
 
-  // SPA fallback for client-side routing
-  app.use((req, res, next) => {
-    if (req.path.startsWith("/api")) return next();
-    return res.sendFile(path.join(__dirname, "../../frontend", "dist", "index.html"));
+  app.get(/^(?!\/api).*/, (req, res) => {
+    return res.sendFile(frontendIndexPath);
   });
 }
 
