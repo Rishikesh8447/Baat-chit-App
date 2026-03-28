@@ -76,14 +76,12 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-messageSchema.pre("validate", function setChatId(next) {
+messageSchema.pre("validate", async function setChatId() {
   if (this.chatType === "group" && this.groupId) {
     this.chatId = buildGroupChatId(this.groupId);
   } else if (this.senderId && this.receiverId) {
     this.chatId = buildDirectChatId(this.senderId, this.receiverId);
   }
-
-  next();
 });
 
 messageSchema.index({ chatId: 1, createdAt: -1 });
