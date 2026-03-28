@@ -1,4 +1,4 @@
-import mongoose, { Types } from "mongoose";
+import mongoose from "mongoose";
  const userSchema=new mongoose.Schema(
 {
     email:{
@@ -30,5 +30,7 @@ import mongoose, { Types } from "mongoose";
 },{timestamps:true}
 
  );
+ userSchema.index({ email: 1 }, { unique: true });
+ userSchema.index({ fullName: 1 });
  const User=mongoose.model("User",userSchema);
  export default User;

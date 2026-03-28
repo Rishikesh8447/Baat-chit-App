@@ -1,8 +1,9 @@
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
-import { generateToken } from "../lib/utils.js";
+import { clearAuthCookie, generateToken } from "../lib/utils.js";
 import cloudinary from "../lib/cloudinary.js";
 import crypto from "crypto";
+import { env } from "../config/env.js";
 
 const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
 const hashResetToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
@@ -11,13 +12,6 @@ export const signup=async(req,res)=>{
     const{fullName,email,password}=req.body
  try {// Hash password
 
-    if(!fullName|| !email ||!password){
-           return res.status(400).json({message:"All fields are required"});
-    }
-    
-    if(password.length<6){
-        return res.status(400).json({message:"Password must be atleast 6 character"});
-    }
     const normalizedFullName = fullName.trim();
     const user=await User.findOne({email})
     if (user) return res.status(400).json({message:"email already exists"});
@@ -84,7 +78,7 @@ fullName:user.fullName,
 
 export const logout=(req,res)=>{
   try {
-    res.cookie("jwt","",{maxAge:0})
+    clearAuthCookie(res);
     res.status(200).json({message:"Logged out successfully"});
     
   } catch (error) {
@@ -140,7 +134,7 @@ export const forgotPassword = async (req, res) => {
     await user.save();
 
     const requestOrigin = req.get("origin");
-    const frontendBaseUrl = process.env.FRONTEND_URL || requestOrigin || "http://localhost:5173";
+    const frontendBaseUrl = env.frontendUrl || requestOrigin || "http://localhost:5173";
     const baseUrl = frontendBaseUrl.replace(/\/+$/, "");
     const resetLink = `${baseUrl}/reset-password/${rawResetToken}`;
 

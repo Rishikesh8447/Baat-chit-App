@@ -2,15 +2,9 @@ import { create } from "zustand";
 import { axiosInstance } from "../lib/axios.js";
 import toast from "react-hot-toast";
 import { io } from "socket.io-client";
+import { getApiErrorMessage } from "../lib/errors.js";
 
 const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:5001" : "/";
-const getErrorMessage = (error, fallback = "Something went wrong") => {
-  const data = error?.response?.data;
-  if (typeof data === "string" && data.trim()) return data;
-  if (data?.message) return data.message;
-  if (data?.error) return data.error;
-  return error?.message || fallback;
-};
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -22,6 +16,9 @@ export const useAuthStore = create((set, get) => ({
   isCheckingAuth: true,
   onlineUsers: [],
   socket: null,
+  socketStatus: "disconnected",
+  socketError: "",
+  socketRecoveryKey: 0,
 
   checkAuth: async () => {
     try {
@@ -45,7 +42,7 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Account created successfully");
       get().connectSocket();
     } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to sign up"));
+      toast.error(getApiErrorMessage(error, "Failed to sign up"));
     } finally {
       set({ isSigningUp: false });
     }
@@ -60,7 +57,7 @@ export const useAuthStore = create((set, get) => ({
 
       get().connectSocket();
     } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to log in"));
+      toast.error(getApiErrorMessage(error, "Failed to log in"));
     } finally {
       set({ isLoggingIn: false });
     }
@@ -73,7 +70,7 @@ export const useAuthStore = create((set, get) => ({
       toast.success("Logged out successfully");
       get().disconnectSocket();
     } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to log out"));
+      toast.error(getApiErrorMessage(error, "Failed to log out"));
     }
   },
 
@@ -84,7 +81,7 @@ export const useAuthStore = create((set, get) => ({
       toast.success(res.data.message || "Reset link generated");
       return res.data;
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to generate reset link");
+      toast.error(getApiErrorMessage(error, "Failed to generate reset link"));
       return null;
     } finally {
       set({ isRequestingPasswordReset: false });
@@ -98,7 +95,7 @@ export const useAuthStore = create((set, get) => ({
       toast.success(res.data.message || "Password reset successful");
       return true;
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Password reset failed");
+      toast.error(getApiErrorMessage(error, "Password reset failed"));
       return false;
     } finally {
       set({ isResettingPassword: false });
@@ -114,7 +111,7 @@ export const useAuthStore = create((set, get) => ({
       return true;
     } catch (error) {
       console.log("error in update profile:", error);
-      toast.error(getErrorMessage(error, "Failed to update profile"));
+      toast.error(getApiErrorMessage(error, "Failed to update profile"));
       return false;
     } finally {
       set({ isUpdatingProfile: false });
@@ -128,28 +125,94 @@ export const useAuthStore = create((set, get) => ({
 
     if (existingSocket) {
       existingSocket.off("getOnlineUsers");
+      existingSocket.off("connect");
+      existingSocket.off("disconnect");
+      existingSocket.off("connect_error");
+      existingSocket.io.off("reconnect_attempt");
+      existingSocket.io.off("reconnect");
+      existingSocket.io.off("reconnect_error");
       existingSocket.disconnect();
     }
 
     const socket = io(BASE_URL, {
+      autoConnect: false,
+      withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 10000,
+      transports: ["websocket", "polling"],
       query: {
         userId: authUser._id,
       },
     });
-    socket.connect();
 
-    set({ socket: socket });
+    set({ socket, socketStatus: "connecting", socketError: "" });
+
+    socket.on("connect", () => {
+      set((state) => ({
+        onlineUsers: Array.isArray(state.onlineUsers) ? state.onlineUsers : [],
+        socketStatus: "online",
+        socketError: "",
+        socketRecoveryKey: state.socketRecoveryKey + 1,
+      }));
+    });
+
+    socket.on("disconnect", (reason) => {
+      set({
+        socketStatus: reason === "io client disconnect" ? "disconnected" : "reconnecting",
+      });
+    });
+
+    socket.on("connect_error", (error) => {
+      set({
+        socketStatus: "reconnecting",
+        socketError: error?.message || "Connection error",
+      });
+    });
+
+    socket.io.on("reconnect_attempt", () => {
+      set({ socketStatus: "reconnecting" });
+    });
+
+    socket.io.on("reconnect", () => {
+      set({
+        socketStatus: "online",
+        socketError: "",
+      });
+    });
+
+    socket.io.on("reconnect_error", (error) => {
+      set({
+        socketStatus: "reconnecting",
+        socketError: error?.message || "Reconnect failed",
+      });
+    });
 
     socket.on("getOnlineUsers", (userIds) => {
       set({ onlineUsers: userIds });
     });
+
+    socket.connect();
   },
   disconnectSocket: () => {
     const socket = get().socket;
     if (socket) {
       socket.off("getOnlineUsers");
+      socket.off("connect");
+      socket.off("disconnect");
+      socket.off("connect_error");
+      socket.io.off("reconnect_attempt");
+      socket.io.off("reconnect");
+      socket.io.off("reconnect_error");
       socket.disconnect();
     }
-    set({ socket: null, onlineUsers: [] });
+    set({
+      socket: null,
+      onlineUsers: [],
+      socketStatus: "disconnected",
+      socketError: "",
+    });
   },
 }));

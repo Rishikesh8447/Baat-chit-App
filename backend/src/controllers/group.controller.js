@@ -1,16 +1,15 @@
 import Group from "../models/group.model.js";
 import Message from "../models/message.model.js";
 import cloudinary from "../lib/cloudinary.js";
-import { getReceiverSocketId, io } from "../lib/socket.js";
-
-const emitToGroupMembers = (memberIds, event, payload) => {
-  memberIds.forEach((memberId) => {
-    const socketId = getReceiverSocketId(memberId.toString());
-    if (socketId) {
-      io.to(socketId).emit(event, payload);
-    }
-  });
-};
+import { buildGroupChatId } from "../models/message.model.js";
+import { formatMessageListResponse, getGroupMessagesPage, searchMessagesInChat } from "../services/message.service.js";
+import {
+  emitGroupChatCleared,
+  emitGroupDeleted,
+  emitGroupMessage,
+  emitGroupRemoved,
+  emitGroupUpdated,
+} from "../socket/socket.service.js";
 
 export const createGroup = async (req, res) => {
   try {
@@ -67,10 +66,35 @@ export const getGroupMessages = async (req, res) => {
       return res.status(403).json({ message: "Not authorized for this group" });
     }
 
-    const messages = await Message.find({ groupId, chatType: "group" }).sort({ createdAt: 1 });
-    return res.status(200).json(messages);
+    const result = await getGroupMessagesPage({ groupId, query: req.query });
+    return res.status(200).json(formatMessageListResponse(result, req.query));
   } catch (error) {
     console.error("Error in getGroupMessages:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const searchGroupMessages = async (req, res) => {
+  try {
+    const myId = req.user._id;
+    const { groupId } = req.params;
+    const { q, limit, mode } = req.query;
+
+    const group = await Group.findOne({ _id: groupId, members: myId }).select("_id");
+    if (!group) {
+      return res.status(403).json({ message: "Not authorized for this group" });
+    }
+
+    const results = await searchMessagesInChat({
+      chatId: buildGroupChatId(groupId),
+      query: q,
+      limit,
+      mode,
+    });
+
+    return res.status(200).json(results);
+  } catch (error) {
+    console.error("Error in searchGroupMessages:", error.message);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -78,13 +102,24 @@ export const getGroupMessages = async (req, res) => {
 export const sendGroupMessage = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const { text, img, image: imageFromBody } = req.body;
+    const { text, img, image: imageFromBody, clientMessageId } = req.body;
     const senderId = req.user._id;
     const image = imageFromBody || img;
 
     const group = await Group.findOne({ _id: groupId, members: senderId });
     if (!group) {
       return res.status(403).json({ message: "Not authorized for this group" });
+    }
+
+    if (clientMessageId) {
+      const existingMessage = await Message.findOne({
+        senderId,
+        clientMessageId,
+      });
+
+      if (existingMessage) {
+        return res.status(200).json(existingMessage);
+      }
     }
 
     let imageUrl;
@@ -98,11 +133,12 @@ export const sendGroupMessage = async (req, res) => {
       groupId,
       chatType: "group",
       text,
+      clientMessageId: clientMessageId || undefined,
       image: imageUrl,
       seen: false,
     });
 
-    emitToGroupMembers(group.members, "newGroupMessage", newMessage);
+    emitGroupMessage(group.members, newMessage);
     return res.status(201).json(newMessage);
   } catch (error) {
     console.error("Error in sendGroupMessage:", error.message);
@@ -127,7 +163,7 @@ export const leaveGroup = async (req, res) => {
 
     const remainingMembers = group.members.filter((memberId) => memberId.toString() !== myId);
     if (remainingMembers.length === 0) {
-      emitToGroupMembers(group.members, "groupDeleted", { groupId });
+      emitGroupDeleted(group.members, groupId);
       await Message.deleteMany({ groupId, chatType: "group" });
       await Group.findByIdAndDelete(groupId);
       return res.status(200).json({ message: "You left and group was deleted", deleted: true });
@@ -142,11 +178,8 @@ export const leaveGroup = async (req, res) => {
     const updatedGroup = await Group.findById(groupId)
       .populate("members", "fullName email profilePic")
       .populate("admin", "fullName email profilePic");
-    emitToGroupMembers(updatedGroup.members, "groupUpdated", updatedGroup);
-    const mySocketId = getReceiverSocketId(myId);
-    if (mySocketId) {
-      io.to(mySocketId).emit("groupRemoved", { groupId });
-    }
+    emitGroupUpdated(updatedGroup.members, updatedGroup);
+    emitGroupRemoved(myId, groupId);
     return res.status(200).json({
       message: "Left group successfully",
       deleted: false,
@@ -172,7 +205,7 @@ export const deleteGroup = async (req, res) => {
       return res.status(403).json({ message: "Only group admin can delete this group" });
     }
 
-    emitToGroupMembers(group.members, "groupDeleted", { groupId });
+    emitGroupDeleted(group.members, groupId);
     await Message.deleteMany({ groupId, chatType: "group" });
     await Group.findByIdAndDelete(groupId);
 
@@ -212,11 +245,8 @@ export const removeGroupMember = async (req, res) => {
       .populate("members", "fullName email profilePic")
       .populate("admin", "fullName email profilePic");
 
-    emitToGroupMembers(updatedGroup.members, "groupUpdated", updatedGroup);
-    const removedSocketId = getReceiverSocketId(memberId);
-    if (removedSocketId) {
-      io.to(removedSocketId).emit("groupRemoved", { groupId });
-    }
+    emitGroupUpdated(updatedGroup.members, updatedGroup);
+    emitGroupRemoved(memberId, groupId);
 
     return res.status(200).json({
       message: "Member removed successfully",
@@ -243,7 +273,7 @@ export const clearGroupMessages = async (req, res) => {
     }
 
     await Message.deleteMany({ groupId, chatType: "group" });
-    emitToGroupMembers(group.members, "chatCleared", { chatType: "group", groupId });
+    emitGroupChatCleared(group.members, groupId);
 
     return res.status(200).json({ message: "Group chat cleared successfully" });
   } catch (error) {

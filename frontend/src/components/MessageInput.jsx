@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useChatStore } from "../store/useChatStore";
-import { Image, Send, X } from "lucide-react";
+import { Image, Loader2, Send, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -10,27 +10,53 @@ const MessageInput = () => {
   const [isTyping, setIsTyping] = useState(false);
   const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const { sendMessage, selectedUser, selectedGroup } = useChatStore();
+  const typingContextRef = useRef({
+    socket: null,
+    authUser: null,
+    isTyping: false,
+    selectedGroupId: null,
+    selectedUserId: null,
+  });
+  const { sendMessage, selectedUser, selectedGroup, isSendingMessage } = useChatStore();
   const { authUser, socket } = useAuthStore();
+  const canSend = Boolean(text.trim() || imagePreview);
 
-  const emitStopTyping = () => {
-    if (!socket || !authUser || !isTyping) return;
+  useEffect(() => {
+    typingContextRef.current = {
+      socket,
+      authUser,
+      isTyping,
+      selectedGroupId: selectedGroup?._id || null,
+      selectedUserId: selectedUser?._id || null,
+    };
+  }, [socket, authUser, isTyping, selectedGroup?._id, selectedUser?._id]);
 
-    const payload = selectedGroup?._id
+  const emitStopTyping = useCallback(() => {
+    const {
+      socket: currentSocket,
+      authUser: currentAuthUser,
+      isTyping: currentIsTyping,
+      selectedGroupId,
+      selectedUserId,
+    } = typingContextRef.current;
+
+    if (!currentSocket || !currentAuthUser || !currentIsTyping) return;
+
+    const payload = selectedGroupId
       ? {
           chatType: "group",
-          groupId: selectedGroup._id,
-          senderId: authUser._id,
+          groupId: selectedGroupId,
+          senderId: currentAuthUser._id,
         }
       : {
           chatType: "direct",
-          receiverId: selectedUser?._id,
-          senderId: authUser._id,
+          receiverId: selectedUserId,
+          senderId: currentAuthUser._id,
         };
 
-    socket.emit("stopTyping", payload);
+    currentSocket.emit("stopTyping", payload);
     setIsTyping(false);
-  };
+  }, []);
 
   const scheduleStopTyping = () => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -41,6 +67,7 @@ const MessageInput = () => {
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
+    if (!file) return;
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file");
       return;
@@ -60,16 +87,16 @@ const MessageInput = () => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!text.trim() && !imagePreview) return;
+    if (!canSend || isSendingMessage) return;
 
     try {
       emitStopTyping();
-      await sendMessage({
+      const sentMessage = await sendMessage({
         text: text.trim(),
         image: imagePreview,
       });
+      if (!sentMessage) return;
 
-      // Clear form
       setText("");
       setImagePreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -116,7 +143,7 @@ const MessageInput = () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       emitStopTyping();
     };
-  }, [selectedUser?._id, selectedGroup?._id]);
+  }, [selectedUser?._id, selectedGroup?._id, emitStopTyping]);
 
   return (
     <div className="p-4 w-full">
@@ -143,11 +170,13 @@ const MessageInput = () => {
       <form onSubmit={handleSendMessage} className="flex items-center gap-2">
         <div className="flex-1 flex gap-2">
           <input
+            data-testid="message-input"
             type="text"
-            className="w-full input input-bordered rounded-lg input-sm sm:input-md"
+            className="w-full input input-bordered rounded-lg input-sm sm:input-md transition-all duration-200"
             placeholder="Type a message..."
             value={text}
             onChange={handleTextChange}
+            disabled={isSendingMessage}
           />
           <input
             type="file"
@@ -155,25 +184,38 @@ const MessageInput = () => {
             className="hidden"
             ref={fileInputRef}
             onChange={handleImageChange}
+            disabled={isSendingMessage}
           />
 
           <button
             type="button"
-            className={`hidden sm:flex btn btn-circle
+            className={`btn btn-circle btn-sm sm:btn-md
                      ${imagePreview ? "text-emerald-500" : "text-zinc-400"}`}
             onClick={() => fileInputRef.current?.click()}
+            disabled={isSendingMessage}
+            title="Attach image"
           >
             <Image size={20} />
           </button>
         </div>
         <button
+          data-testid="send-message"
           type="submit"
-          className="btn btn-sm btn-circle"
-          disabled={!text.trim() && !imagePreview}
+          className="btn btn-sm sm:btn-md btn-circle transition-all duration-200"
+          disabled={!canSend || isSendingMessage}
+          title={isSendingMessage ? "Sending message" : "Send message"}
         >
-          <Send size={22} />
+          {isSendingMessage ? (
+            <Loader2 size={18} className="animate-spin" />
+          ) : (
+            <Send size={20} />
+          )}
         </button>
       </form>
+
+      {isSendingMessage && (
+        <p className="mt-2 text-xs text-base-content/60">Sending message...</p>
+      )}
     </div>
   );
 };

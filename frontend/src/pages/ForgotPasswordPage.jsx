@@ -45,6 +45,7 @@ const ForgotPasswordPage = () => {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={isRequestingPasswordReset}
               />
             </div>
           </div>
@@ -53,7 +54,7 @@ const ForgotPasswordPage = () => {
             {isRequestingPasswordReset ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Generating...
+                Generating link...
               </>
             ) : (
               "Generate Reset Link"

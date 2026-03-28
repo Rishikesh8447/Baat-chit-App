@@ -44,11 +44,13 @@ const LoginPage = () => {
                   <Mail className="h-5 w-5 text-base-content/40" />
                 </div>
                 <input
+                  data-testid="login-email"
                   type="email"
                   className="input input-bordered w-full pl-10 pr-3 focus:outline-none focus:border-primary"
                   placeholder="you@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  disabled={isLoggingIn}
                 />
               </div>
             </div>
@@ -60,16 +62,19 @@ const LoginPage = () => {
                   <Lock className="h-5 w-5 text-base-content/40" />
                 </div>
                 <input
+                  data-testid="login-password"
                   type={showPassword ? "text" : "password"}
                   className="input input-bordered w-full pl-10 pr-10 focus:outline-none focus:border-primary"
                   placeholder="********"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  disabled={isLoggingIn}
                 />
                 <button
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={isLoggingIn}
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5 text-base-content/40" />
@@ -81,6 +86,7 @@ const LoginPage = () => {
             </div>
 
             <button
+              data-testid="login-submit"
               type="submit"
               className="btn btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isLoggingIn}
@@ -88,7 +94,7 @@ const LoginPage = () => {
               {isLoggingIn ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Loading...
+                  Signing in...
                 </>
               ) : (
                 "Sign in"

@@ -8,6 +8,7 @@ const Sidebar = () => {
   const {
     getUsers,
     getGroups,
+    refreshGroups,
     createGroup,
     users,
     groups,
@@ -21,7 +22,7 @@ const Sidebar = () => {
     subscribeToMessages,
     unsubscribeFromMessages,
   } = useChatStore();
-  const { onlineUsers = [], authUser } = useAuthStore();
+  const { onlineUsers = [], authUser, socket, socketRecoveryKey } = useAuthStore();
   const [showOnlineOnly, setShowOnlineOnly] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
@@ -33,15 +34,21 @@ const Sidebar = () => {
     getGroups();
     const interval = setInterval(() => {
       getUsers(true);
-      getGroups();
+      refreshGroups(true);
     }, 15000);
     return () => clearInterval(interval);
-  }, [getUsers, getGroups]);
+  }, [getUsers, getGroups, refreshGroups]);
 
   useEffect(() => {
     subscribeToMessages();
     return () => unsubscribeFromMessages();
-  }, [subscribeToMessages, unsubscribeFromMessages]);
+  }, [socket, subscribeToMessages, unsubscribeFromMessages]);
+
+  useEffect(() => {
+    if (!socketRecoveryKey) return;
+    getUsers(true);
+    refreshGroups(true);
+  }, [socketRecoveryKey, getUsers, refreshGroups]);
 
   const filteredUsers = showOnlineOnly
     ? users.filter((user) => onlineUsers.includes(user._id))
@@ -101,6 +108,7 @@ const Sidebar = () => {
         {filteredUsers.map((user) => (
           <button
             key={user._id}
+            data-testid={`contact-${user.email}`}
             onClick={() => setSelectedUser(user)}
             className={`
               w-full p-3 flex items-center gap-3
@@ -144,6 +152,7 @@ const Sidebar = () => {
         {groups.map((group) => (
           <button
             key={group._id}
+            data-testid={`group-${group._id}`}
             onClick={() => setSelectedGroup(group)}
             className={`
               w-full p-3 flex items-center gap-3

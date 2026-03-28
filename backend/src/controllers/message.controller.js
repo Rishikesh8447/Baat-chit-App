@@ -1,49 +1,25 @@
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
-import Group from "../models/group.model.js";
 import cloudinary from "../lib/cloudinary.js";
-import { getReceiverSocketId, io } from "../lib/socket.js";
+import {
+  formatMessageListResponse,
+  getDirectMessagesPage,
+  getSidebarMessageMeta,
+  searchMessagesInChat,
+} from "../services/message.service.js";
+import { buildDirectChatId } from "../models/message.model.js";
+import {
+  emitDirectChatCleared,
+  emitDirectMessage,
+  emitMessageDeleted,
+  emitMessageUpdated,
+} from "../socket/socket.service.js";
 export const getUsersForSidebar=async(req,res)=>{
 try {
     const LoggedInUserId=req.user._id;
     const filteredUsers=await User.find({_id:{$ne:LoggedInUserId}}).select("-password");
-    const messages = await Message.find({
-      $and: [
-        { $or: [{ senderId: LoggedInUserId }, { receiverId: LoggedInUserId }] },
-        { $or: [{ chatType: "direct" }, { chatType: { $exists: false } }] },
-      ],
-    })
-      .sort({ createdAt: -1 })
-      .select("senderId receiverId text image createdAt seen isDeleted");
-
-    const byUser = new Map();
-
-    for (const msg of messages) {
-      const senderId = msg.senderId.toString();
-      const receiverId = msg.receiverId.toString();
-      const isMine = senderId === LoggedInUserId.toString();
-      const otherUserId = isMine ? receiverId : senderId;
-
-      if (!byUser.has(otherUserId)) {
-        const lastMessage = msg.isDeleted
-          ? "Message deleted"
-          : msg.text?.trim()
-            ? msg.text
-            : msg.image
-              ? "Image"
-              : "";
-        byUser.set(otherUserId, {
-          lastMessage,
-          lastMessageAt: msg.createdAt,
-          unreadCount: 0,
-        });
-      }
-
-      if (!isMine && !msg.seen) {
-        const current = byUser.get(otherUserId);
-        current.unreadCount += 1;
-      }
-    }
+    const sidebarMeta = await getSidebarMessageMeta(LoggedInUserId);
+    const byUser = new Map(sidebarMeta.map((item) => [item.otherUserId, item]));
 
     const usersWithMeta = filteredUsers.map((user) => {
       const meta = byUser.get(user._id.toString());
@@ -70,18 +46,38 @@ try {
 }
 };
 
+export const searchDirectMessages = async (req, res) => {
+  try {
+    const myId = req.user._id;
+    const { id: otherUserId } = req.params;
+    const { q, limit, mode } = req.query;
+
+    const results = await searchMessagesInChat({
+      chatId: buildDirectChatId(myId, otherUserId),
+      query: q,
+      limit,
+      mode,
+    });
+
+    return res.status(200).json(results);
+  } catch (error) {
+    console.error("Error in searchDirectMessages:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const getMessages=async(req,res)=>{
     try {
      const {id:UserToChatId}  =req.params 
      const myId=req.user._id;
 
-     const messages=await Message.find({$or:[{
-        senderId:myId,receiverId:UserToChatId
-     },{senderId:UserToChatId,receiverId:myId}
-    ]})
-      .where("chatType")
-      .in(["direct", null])
-     res.status(200).json(messages)
+     const result = await getDirectMessagesPage({
+        currentUserId: myId,
+        otherUserId: UserToChatId,
+        query: req.query,
+     });
+
+     res.status(200).json(formatMessageListResponse(result, req.query))
     } catch (error) {
         console.log("Error in getMessage Controller:",error.message);
         res.status(500).json({error:"Internal server error"});
@@ -89,10 +85,21 @@ export const getMessages=async(req,res)=>{
 };
 export const sendMessage=async(req,res)=>{
     try {
-        const{text,img,image:imageFromBody}=req.body;
+        const{text,img,image:imageFromBody, clientMessageId}=req.body;
         const {id:receiverId}=req.params;
         const senderId=req.user._id;
         const image = imageFromBody || img;
+
+        if (clientMessageId) {
+          const existingMessage = await Message.findOne({
+            senderId,
+            clientMessageId,
+          });
+
+          if (existingMessage) {
+            return res.status(200).json(existingMessage);
+          }
+        }
 
         let  imageUrl;  
 
@@ -105,17 +112,16 @@ export const sendMessage=async(req,res)=>{
         const newMessage= new Message({
             senderId,
             receiverId,
+            chatType: "direct",
             text,
+            clientMessageId: clientMessageId || undefined,
             image:imageUrl,
             seen: false,
         });
 
         await newMessage.save();
 
-        const receiverSocketId = getReceiverSocketId(receiverId);
-        if (receiverSocketId) {
-          io.to(receiverSocketId).emit("newMessage", newMessage);
-        }
+        emitDirectMessage(receiverId, newMessage);
 
 res.status(201).json(newMessage);
             } catch (error) {
@@ -174,27 +180,7 @@ export const editMessage = async (req, res) => {
     message.isEdited = true;
     message.editedAt = new Date();
     await message.save();
-
-const senderSocketId = getReceiverSocketId(message.senderId.toString());
-    if (message.chatType === "group" && message.groupId) {
-      const group = await Group.findById(message.groupId).select("members");
-      if (group) {
-        group.members.forEach((memberId) => {
-          const socketId = getReceiverSocketId(memberId.toString());
-          if (socketId) io.to(socketId).emit("messageUpdated", message);
-        });
-      }
-    } else {
-      const receiverSocketId = message.receiverId
-        ? getReceiverSocketId(message.receiverId.toString())
-        : null;
-      if (senderSocketId) {
-        io.to(senderSocketId).emit("messageUpdated", message);
-      }
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("messageUpdated", message);
-      }
-    }
+    await emitMessageUpdated(message);
 
     return res.status(200).json(message);
   } catch (error) {
@@ -222,27 +208,7 @@ export const deleteMessage = async (req, res) => {
     message.isDeleted = true;
     message.deletedAt = new Date();
     await message.save();
-
-const senderSocketId = getReceiverSocketId(message.senderId.toString());
-    if (message.chatType === "group" && message.groupId) {
-      const group = await Group.findById(message.groupId).select("members");
-      if (group) {
-        group.members.forEach((memberId) => {
-          const socketId = getReceiverSocketId(memberId.toString());
-          if (socketId) io.to(socketId).emit("messageDeleted", message);
-        });
-      }
-    } else {
-      const receiverSocketId = message.receiverId
-        ? getReceiverSocketId(message.receiverId.toString())
-        : null;
-      if (senderSocketId) {
-        io.to(senderSocketId).emit("messageDeleted", message);
-      }
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit("messageDeleted", message);
-      }
-    }
+    await emitMessageDeleted(message);
 
     return res.status(200).json(message);
   } catch (error) {
@@ -264,13 +230,7 @@ export const clearDirectChat = async (req, res) => {
         { senderId: otherUserId, receiverId: myId, chatType: { $exists: false } },
       ],
     });
-
-    const payload = { chatType: "direct", userA: myId, userB: otherUserId };
-    const mySocketId = getReceiverSocketId(myId);
-    const otherSocketId = getReceiverSocketId(otherUserId);
-
-    if (mySocketId) io.to(mySocketId).emit("chatCleared", payload);
-    if (otherSocketId) io.to(otherSocketId).emit("chatCleared", payload);
+    emitDirectChatCleared({ userA: myId, userB: otherUserId });
 
     return res.status(200).json({ message: "Chat cleared successfully" });
   } catch (error) {

@@ -1,5 +1,5 @@
 import { useChatStore } from "../store/useChatStore";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import ChatHeader from "./ChatHeader";
 import MessageInput from "./MessageInput";
@@ -13,16 +13,28 @@ const ChatContainer = () => {
     messages,
     getMessages,
     getGroupMessages,
+    loadOlderMessages,
     markMessagesAsSeen,
     isMessagesLoading,
+    isFetchingOlderMessages,
+    isSearchingMessages,
+    messagePagination,
     selectedUser,
     selectedGroup,
     editMessage,
     deleteMessage,
     clearActiveChat,
+    searchMessages,
+    searchResults,
+    clearSearchResults,
+    retryPendingMessages,
   } = useChatStore();
-  const { authUser } = useAuthStore();
+  const { authUser, socketRecoveryKey, socketStatus } = useAuthStore();
   const messageEndRef = useRef(null);
+  const messageListRef = useRef(null);
+  const shouldAutoScrollRef = useRef(false);
+  const lastRecoveredKeyRef = useRef(0);
+  const searchDebounceRef = useRef(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editedText, setEditedText] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -33,76 +45,161 @@ const ChatContainer = () => {
 
   useEffect(() => {
     if (selectedGroup?._id) {
+      shouldAutoScrollRef.current = true;
+      void retryPendingMessages();
       getGroupMessages(selectedGroup._id);
       return;
     }
 
     if (selectedUser?._id) {
+      shouldAutoScrollRef.current = true;
+      void retryPendingMessages();
       getMessages(selectedUser._id);
       markMessagesAsSeen(selectedUser._id);
     }
   }, [
     selectedUser?._id,
     selectedGroup?._id,
+    retryPendingMessages,
+    getMessages,
+    getGroupMessages,
+    loadOlderMessages,
+    markMessagesAsSeen,
+  ]);
+
+  useEffect(() => {
+    if (!socketRecoveryKey || socketRecoveryKey === lastRecoveredKeyRef.current) return;
+    if (socketStatus !== "online") return;
+
+    lastRecoveredKeyRef.current = socketRecoveryKey;
+
+    if (selectedGroup?._id) {
+      void retryPendingMessages();
+      getGroupMessages(selectedGroup._id);
+      return;
+    }
+
+    if (selectedUser?._id) {
+      void retryPendingMessages();
+      getMessages(selectedUser._id);
+      markMessagesAsSeen(selectedUser._id);
+    }
+  }, [
+    socketRecoveryKey,
+    socketStatus,
+    selectedUser?._id,
+    selectedGroup?._id,
+    retryPendingMessages,
     getMessages,
     getGroupMessages,
     markMessagesAsSeen,
   ]);
 
   useEffect(() => {
-    if (messageEndRef.current && messages) {
+    if (shouldAutoScrollRef.current && messageEndRef.current && messages.length) {
       messageEndRef.current.scrollIntoView({ behavior: "smooth" });
+      shouldAutoScrollRef.current = false;
     }
   }, [messages]);
 
-  const normalizedQuery = searchQuery.trim().toLowerCase();
-  const matchedMessageIds = useMemo(() => {
-    return messages
-      .filter((message) => {
-        const text = (message.text || "").toLowerCase();
-        const image = (message.image || "").toLowerCase();
-        const hasFile = Boolean(message.image);
-        const hasText = Boolean(message.text?.trim());
-        const textMatch = normalizedQuery ? text.includes(normalizedQuery) : false;
-        const imageMatch = normalizedQuery ? image.includes(normalizedQuery) : false;
+  const handleLoadOlderMessages = async () => {
+    const listEl = messageListRef.current;
+    if (!listEl || isFetchingOlderMessages || !messagePagination?.hasMore) return;
 
-        if (searchMode === "text") {
-          return normalizedQuery ? textMatch : hasText;
-        }
-        if (searchMode === "file") {
-          return normalizedQuery ? hasFile && (textMatch || imageMatch) : hasFile;
-        }
-        return normalizedQuery ? textMatch || imageMatch : false;
-      })
-      .map((message) => message._id);
-  }, [messages, normalizedQuery, searchMode]);
+    const previousScrollHeight = listEl.scrollHeight;
+    const loaded = await loadOlderMessages();
+    if (!loaded) return;
 
-  const activeMatchId = activeMatchIndex >= 0 ? matchedMessageIds[activeMatchIndex] : null;
-  const matchedMessageSet = useMemo(() => new Set(matchedMessageIds), [matchedMessageIds]);
+    requestAnimationFrame(() => {
+      const nextScrollHeight = listEl.scrollHeight;
+      listEl.scrollTop = nextScrollHeight - previousScrollHeight + listEl.scrollTop;
+    });
+  };
+
+  const handleMessageListScroll = async (event) => {
+    const target = event.currentTarget;
+    if (target.scrollTop > 120) return;
+    await handleLoadOlderMessages();
+  };
 
   useEffect(() => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
     if (!isSearchOpen) {
-      setActiveMatchIndex(-1);
+      clearSearchResults();
       return;
     }
-    setActiveMatchIndex(matchedMessageIds.length ? 0 : -1);
-  }, [matchedMessageIds, isSearchOpen]);
+
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery.length < 2) {
+      clearSearchResults();
+      return;
+    }
+
+    searchDebounceRef.current = setTimeout(() => {
+      searchMessages({ query: trimmedQuery, mode: searchMode }).then((results) => {
+        setActiveMatchIndex(results.length ? 0 : -1);
+      });
+    }, 250);
+
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, [searchQuery, searchMode, isSearchOpen, searchMessages, clearSearchResults]);
+
+  const matchedMessageIds = useMemo(
+    () => searchResults.map((message) => message._id),
+    [searchResults]
+  );
+
+  const effectiveActiveMatchIndex =
+    activeMatchIndex >= 0 && activeMatchIndex < matchedMessageIds.length
+      ? activeMatchIndex
+      : matchedMessageIds.length
+        ? 0
+        : -1;
+  const activeMatchId =
+    effectiveActiveMatchIndex >= 0 ? matchedMessageIds[effectiveActiveMatchIndex] : null;
+  const matchedMessageSet = useMemo(() => new Set(matchedMessageIds), [matchedMessageIds]);
+
+  const ensureMessageIsLoaded = useCallback(async (messageId) => {
+    let messageEl = document.getElementById(`message-${messageId}`);
+    let attempts = 0;
+
+    while (!messageEl && useChatStore.getState().messagePagination?.hasMore && attempts < 10) {
+      const loaded = await loadOlderMessages();
+      if (!loaded) break;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      messageEl = document.getElementById(`message-${messageId}`);
+      attempts += 1;
+    }
+
+    return messageEl;
+  }, [loadOlderMessages]);
+
+  const focusSearchResult = useCallback(async (messageId) => {
+    const messageEl = await ensureMessageIsLoaded(messageId);
+    messageEl?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [ensureMessageIsLoaded]);
 
   useEffect(() => {
     if (!activeMatchId) return;
-    const messageEl = document.getElementById(`message-${activeMatchId}`);
-    messageEl?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeMatchId]);
+    void focusSearchResult(activeMatchId);
+  }, [activeMatchId, focusSearchResult]);
 
   const moveToNextMatch = () => {
     if (!matchedMessageIds.length) return;
-    setActiveMatchIndex((prev) => (prev + 1) % matchedMessageIds.length);
+    setActiveMatchIndex((effectiveActiveMatchIndex + 1) % matchedMessageIds.length);
   };
 
   const moveToPrevMatch = () => {
     if (!matchedMessageIds.length) return;
-    setActiveMatchIndex((prev) =>
-      prev <= 0 ? matchedMessageIds.length - 1 : prev - 1
+    setActiveMatchIndex(
+      effectiveActiveMatchIndex <= 0 ? matchedMessageIds.length - 1 : effectiveActiveMatchIndex - 1
     );
   };
 
@@ -145,6 +242,22 @@ const ChatContainer = () => {
   const handleClearChat = async () => {
     await clearActiveChat();
     setIsClearConfirmOpen(false);
+  };
+
+  const getDeliveryStatusLabel = (message) => {
+    if (message.deliveryStatus === "sending") {
+      return message._retryCount ? `Retrying (${message._retryCount})...` : "Sending...";
+    }
+
+    if (message.deliveryStatus === "queued") {
+      return message._retryCount ? `Queued for retry (${message._retryCount})` : "Queued for retry";
+    }
+
+    if (message.deliveryStatus === "failed") {
+      return "Send failed";
+    }
+
+    return "";
   };
 
   if (isMessagesLoading) {
@@ -210,7 +323,7 @@ const ChatContainer = () => {
             </button>
             <span className="text-xs text-base-content/70 min-w-16 text-center">
               {matchedMessageIds.length
-                ? `${activeMatchIndex + 1}/${matchedMessageIds.length}`
+                ? `${effectiveActiveMatchIndex + 1}/${matchedMessageIds.length}`
                 : "0/0"}
             </span>
             <button
@@ -220,6 +333,7 @@ const ChatContainer = () => {
                 setIsSearchOpen(false);
                 setSearchQuery("");
                 setSearchMode("all");
+                clearSearchResults();
               }}
             >
               <X className="size-4" />
@@ -236,13 +350,72 @@ const ChatContainer = () => {
             )}
           </div>
         )}
+        {isSearchOpen && (
+          <div className="mt-2 rounded-xl border border-base-300 bg-base-200/40">
+            {isSearchingMessages ? (
+              <div className="px-3 py-3 text-sm text-base-content/70">Searching conversation...</div>
+            ) : searchQuery.trim().length < 2 ? (
+              <div className="px-3 py-3 text-sm text-base-content/70">
+                Type at least 2 characters to search the full conversation
+              </div>
+            ) : searchResults.length === 0 ? (
+              <div className="px-3 py-3 text-sm text-base-content/70">No matches found</div>
+            ) : (
+              <div className="max-h-44 overflow-y-auto py-2">
+                {searchResults.map((result, index) => (
+                  <button
+                    key={result._id}
+                    type="button"
+                    className={`w-full px-3 py-2 text-left transition-colors hover:bg-base-300/60 ${
+                      activeMatchId === result._id ? "bg-base-300/60" : ""
+                    }`}
+                    onClick={async () => {
+                      setActiveMatchIndex(index);
+                      await focusSearchResult(result._id);
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-sm font-medium">
+                        {result.isDeleted
+                          ? "Deleted message"
+                          : result.text?.trim() || (result.image ? "Image attachment" : "Message")}
+                      </p>
+                      <span className="shrink-0 text-xs text-base-content/60">
+                        {formatMessageTime(result.createdAt)}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        ref={messageListRef}
+        data-testid="message-list"
+        className="flex-1 overflow-y-auto p-4 space-y-4"
+        onScroll={handleMessageListScroll}
+      >
+        {isFetchingOlderMessages && (
+          <div className="flex justify-center pb-2">
+            <span className="rounded-full border border-base-300 bg-base-100 px-3 py-1 text-xs text-base-content/70">
+              Loading older messages...
+            </span>
+          </div>
+        )}
+        {!messagePagination?.hasMore && messages.length > 0 && (
+          <div className="flex justify-center pb-2">
+            <span className="text-xs text-base-content/50">Start of conversation</span>
+          </div>
+        )}
         {messages.map((message) => (
           <div
             id={`message-${message._id}`}
-            key={message._id}
+            key={message.clientMessageId || message._id}
+            data-testid="chat-message"
+            data-message-id={message.clientMessageId || message._id}
             className={`group rounded-lg px-1 ${
               activeMatchId === message._id
                 ? "bg-primary/10 ring-1 ring-primary/40"
@@ -250,7 +423,6 @@ const ChatContainer = () => {
                   ? "bg-base-200/50"
                   : ""
             }`}
-            ref={messageEndRef}
           >
             <div className={`chat ${message.senderId === authUser._id ? "chat-end" : "chat-start"}`}>
             <div className=" chat-image avatar">
@@ -265,6 +437,9 @@ const ChatContainer = () => {
               <time className="text-xs opacity-50 ml-1">
                 {formatMessageTime(message.createdAt)}
               </time>
+              {message.senderId === authUser._id && message.deliveryStatus !== "sent" && (
+                <span className="text-xs opacity-60 ml-1">{getDeliveryStatusLabel(message)}</span>
+              )}
               {message.isEdited && !message.isDeleted && (
                 <span className="text-xs opacity-60 ml-1">(edited)</span>
               )}
@@ -318,7 +493,11 @@ const ChatContainer = () => {
             </div>
             </div>
 
-            {message.senderId === authUser._id && !message.isDeleted && editingMessageId !== message._id && (
+            {message.senderId === authUser._id &&
+              !message.isDeleted &&
+              editingMessageId !== message._id &&
+              !message._isOptimistic &&
+              message.deliveryStatus === "sent" && (
               <div
                 className={`mt-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${
                   message.senderId === authUser._id ? "justify-end" : "justify-start"
@@ -346,6 +525,7 @@ const ChatContainer = () => {
             )}
           </div>
         ))}
+        <div ref={messageEndRef} />
       </div>
 
       <MessageInput />

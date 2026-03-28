@@ -53,11 +53,13 @@ const SignUpPage = () => {
                   <User className="size-5 text-base-content/40" />
                 </div>
                 <input
+                  data-testid="signup-fullName"
                   type="text"
                   className="input input-bordered w-full pl-10 pr-3 focus:outline-none focus:border-primary"
                   placeholder="User"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  disabled={isSigningUp}
                 />
               </div>
             </div>
@@ -69,11 +71,13 @@ const SignUpPage = () => {
                   <Mail className="size-5 text-base-content/40" />
                 </div>
                 <input
+                  data-testid="signup-email"
                   type="email"
                   className="input input-bordered w-full pl-10 pr-3 focus:outline-none focus:border-primary"
                   placeholder="you@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  disabled={isSigningUp}
                 />
               </div>
             </div>
@@ -85,16 +89,19 @@ const SignUpPage = () => {
                   <Lock className="size-5 text-base-content/40" />
                 </div>
                 <input
+                  data-testid="signup-password"
                   type={showPassword ? "text" : "password"}
                   className="input input-bordered w-full pl-10 pr-10 focus:outline-none focus:border-primary"
                   placeholder="********"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  disabled={isSigningUp}
                 />
                 <button
                   type="button"
                   className="absolute inset-y-0 right-0 pr-3 flex items-center"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={isSigningUp}
                 >
                   {showPassword ? (
                     <EyeOff className="size-5 text-base-content/40" />
@@ -106,6 +113,7 @@ const SignUpPage = () => {
             </div>
 
             <button
+              data-testid="signup-submit"
               type="submit"
               className="btn btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isSigningUp}
@@ -113,7 +121,7 @@ const SignUpPage = () => {
               {isSigningUp ? (
                 <>
                   <Loader2 className="size-5 animate-spin" />
-                  Loading...
+                  Creating account...
                 </>
               ) : (
                 "Create Account"

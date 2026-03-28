@@ -14,7 +14,7 @@ const ChatHeader = () => {
     deleteGroup,
     removeGroupMember,
   } = useChatStore();
-  const { onlineUsers = [], authUser } = useAuthStore();
+  const { onlineUsers = [], authUser, socketStatus } = useAuthStore();
   const isGroupChat = Boolean(selectedGroup);
   const adminId =
     typeof selectedGroup?.admin === "object"
@@ -23,6 +23,15 @@ const ChatHeader = () => {
   const isGroupAdmin = isGroupChat && adminId === authUser?._id;
   const [confirmAction, setConfirmAction] = useState(null);
   const [isManageOpen, setIsManageOpen] = useState(false);
+
+  const connectionLabel =
+    socketStatus === "online"
+      ? "Online"
+      : socketStatus === "reconnecting"
+        ? "Reconnecting..."
+        : socketStatus === "connecting"
+          ? "Connecting..."
+          : "Offline";
 
   const handleLeaveGroup = async () => {
     if (!selectedGroup?._id) return;
@@ -67,18 +76,22 @@ const ChatHeader = () => {
                 <p className="text-xs opacity-70">
                   Admin: {selectedGroup.admin?.fullName || "Group creator"}
                 </p>
+                <p data-testid="connection-status" className="text-xs opacity-70">{connectionLabel}</p>
                 {typingIndicator?.chatType === "group" && typingIndicator?.groupId === selectedGroup._id && (
                   <p className="text-xs text-primary">{typingIndicator.senderName} is typing...</p>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-base-content/70">
-                {typingIndicator?.chatType === "direct" && typingIndicator?.senderId === selectedUser._id
-                  ? `${selectedUser.fullName} is typing...`
-                  : onlineUsers.includes(selectedUser._id)
-                    ? "Online"
-                    : "Offline"}
-              </p>
+              <div className="text-sm text-base-content/70">
+                <p>
+                  {typingIndicator?.chatType === "direct" && typingIndicator?.senderId === selectedUser._id
+                    ? `${selectedUser.fullName} is typing...`
+                    : onlineUsers.includes(selectedUser._id)
+                      ? "Online"
+                      : "Offline"}
+                </p>
+                <p data-testid="connection-status" className="text-xs opacity-70">{connectionLabel}</p>
+              </div>
             )}
           </div>
         </div>
