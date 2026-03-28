@@ -20,8 +20,13 @@ const io = new Server(server, {
 export const initializeSocketServer = async () => {
   if (socketServerInitialized) return;
 
-  await connectRedis();
-  io.adapter(createAdapter(getRedisPubClient(), getRedisSubClient()));
+  const redisConnected = await connectRedis();
+  if (redisConnected) {
+    io.adapter(createAdapter(getRedisPubClient(), getRedisSubClient()));
+  } else {
+    console.warn("Socket.IO Redis adapter disabled. Running without Redis.");
+  }
+
   registerSocketHandlers(io);
   socketServerInitialized = true;
 };

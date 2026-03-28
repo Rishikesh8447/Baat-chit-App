@@ -26,11 +26,10 @@ import mongoose from "mongoose";
     resetPasswordExpiresAt: {
         type: Date,
         default: null,
-    },
+ },
 },{timestamps:true}
 
  );
- userSchema.index({ email: 1 }, { unique: true });
  userSchema.index({ fullName: 1 });
  const User=mongoose.model("User",userSchema);
  export default User;

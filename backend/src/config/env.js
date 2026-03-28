@@ -23,9 +23,9 @@ const normalizeOrigins = (origins = []) =>
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
-  port: getNumberEnv("PORT", 5001),
+  port: getNumberEnv("PORT", 5000),
   mongoUri: getRequiredEnv("MONGODB_URI"),
-  redisUrl: process.env.REDIS_URL || "redis://127.0.0.1:6379",
+  redisUrl: process.env.REDIS_URL?.trim() || "",
   redisKeyPrefix: process.env.REDIS_KEY_PREFIX || "baat-chit",
   jwtSecret: getRequiredEnv("JWT_SECRET"),
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",

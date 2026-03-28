@@ -16,6 +16,10 @@ export const rateLimit = ({
   return async (req, res, next) => {
     try {
       const redis = getRedisClient();
+      if (!redis) {
+        return next();
+      }
+
       const identifier = toRateLimitKey(resolveIdentifier(req));
       const redisKey = `${env.redisKeyPrefix}:ratelimit:${key}:${identifier}`;
       const now = Date.now();
@@ -48,7 +52,8 @@ export const rateLimit = ({
       res.setHeader("X-RateLimit-Remaining", String(Math.max(max - (currentCount + 1), 0)));
       return next();
     } catch (error) {
-      return next(error);
+      console.warn(`Rate limiter fallback for ${key}: ${error.message}`);
+      return next();
     }
   };
 };

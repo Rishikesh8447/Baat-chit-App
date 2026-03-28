@@ -71,19 +71,25 @@ const shutdown = async (signal) => {
   });
 });
 
-const startServer = async () => {
+const bootstrapServices = async () => {
   try {
     await connectDB();
-    await initializeSocketServer();
-
-    server.listen(PORT, () => {
-      console.log("server is running on PORT:" + PORT);
-    });
   } catch (error) {
-    console.error("Failed to start server:", error);
-    await disconnectRedis().catch(() => {});
-    process.exit(1);
+    console.error(`MongoDB startup warning: ${error.message}`);
+  }
+
+  try {
+    await initializeSocketServer();
+  } catch (error) {
+    console.error(`Socket startup warning: ${error.message}`);
   }
 };
 
-startServer();
+server.on("error", (error) => {
+  console.error(`Server error: ${error.message}`);
+});
+
+server.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+  void bootstrapServices();
+});

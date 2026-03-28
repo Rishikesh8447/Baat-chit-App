@@ -20,6 +20,8 @@ export const refreshUserSocket = async (userId, socketId) => {
   if (!normalizedUserId || !socketId) return;
 
   const redis = getRedisClient();
+  if (!redis) return;
+
   const now = Date.now();
   const multi = redis.multi();
   multi.sAdd(userSocketsKey(normalizedUserId), socketId);
@@ -37,6 +39,8 @@ export const unregisterSocket = async (socketId, userIdOverride = null) => {
   if (!socketId) return;
 
   const redis = getRedisClient();
+  if (!redis) return;
+
   const storedUserId = userIdOverride ? normalizeUserId(userIdOverride) : await redis.get(socketUserKey(socketId));
   const normalizedUserId = normalizeUserId(storedUserId);
 
@@ -62,6 +66,8 @@ export const unregisterSocket = async (socketId, userIdOverride = null) => {
 
 export const getOnlineUserIds = async () => {
   const redis = getRedisClient();
+  if (!redis) return [];
+
   const cutoff = Date.now() - PRESENCE_TTL_MS;
   await redis.zRemRangeByScore(onlineUsersKey, 0, cutoff);
   return redis.zRange(onlineUsersKey, 0, -1);
