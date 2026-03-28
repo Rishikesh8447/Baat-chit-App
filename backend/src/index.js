@@ -24,17 +24,6 @@ const frontendIndexPath = path.resolve(frontendDistPath, "index.html");
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "10mb", strict: true }));
 app.use(cookieParser());
-app.use(
-  cors({
-    origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin.replace(/\/+$/, ""))) {
-        return callback(null, true);
-      }
-      return callback(new Error("Origin not allowed by CORS"));
-    },
-    credentials: true,
-  })
-);
 
 if (env.nodeEnv === "production") {
   console.log(`Serving frontend static files from: ${frontendDistPath}`);
@@ -45,6 +34,13 @@ if (env.nodeEnv === "production") {
     })
   );
 }
+
+const apiCors = cors({
+  origin: allowedOrigins,
+  credentials: true,
+});
+
+app.use("/api", apiCors);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
