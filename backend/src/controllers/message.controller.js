@@ -66,70 +66,68 @@ export const searchDirectMessages = async (req, res) => {
   }
 };
 
-export const getMessages=async(req,res)=>{
-    try {
-     const {id:UserToChatId}  =req.params 
-     const myId=req.user._id;
-     const query = req.validatedQuery || req.query;
+export const getMessages = async (req, res) => {
+  try {
+    const { id: userToChatId } = req.params;
+    const myId = req.user._id;
+    const query = req.validatedQuery || req.query;
 
-     const result = await getDirectMessagesPage({
-        currentUserId: myId,
-        otherUserId: UserToChatId,
-        query,
-     });
+    const result = await getDirectMessagesPage({
+      currentUserId: myId,
+      otherUserId: userToChatId,
+      query,
+    });
 
-     res.status(200).json(formatMessageListResponse(result, query))
-    } catch (error) {
-        console.log("Error in getMessage Controller:",error.message);
-        res.status(500).json({error:"Internal server error"});
-    }
+    return res.status(200).json(formatMessageListResponse(result, query));
+  } catch (error) {
+    console.error("Error in getMessages controller:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
 };
-export const sendMessage=async(req,res)=>{
-    try {
-        const{text,img,image:imageFromBody, clientMessageId}=req.body;
-        const {id:receiverId}=req.params;
-        const senderId=req.user._id;
-        const image = imageFromBody || img;
+export const sendMessage = async (req, res) => {
+  try {
+    const { text, img, image: imageFromBody, clientMessageId } = req.body;
+    const { id: receiverId } = req.params;
+    const senderId = req.user._id;
+    const image = imageFromBody || img;
 
-        if (clientMessageId) {
-          const existingMessage = await Message.findOne({
-            senderId,
-            clientMessageId,
-          });
+    if (clientMessageId) {
+      const existingMessage = await Message.findOne({
+        senderId,
+        clientMessageId,
+      });
 
-          if (existingMessage) {
-            return res.status(200).json(existingMessage);
-          }
-        }
-
-        let  imageUrl;  
-
-        if(image){
-// upload Base64 image to cloudinary
-        const uploadResponse=await cloudinary.uploader.upload(image);
-        imageUrl=uploadResponse.secure_url;
-        }
-
-        const newMessage= new Message({
-            senderId,
-            receiverId,
-            chatType: "direct",
-            text,
-            clientMessageId: clientMessageId || undefined,
-            image:imageUrl,
-            seen: false,
-        });
-
-        await newMessage.save();
-
-        emitDirectMessage(receiverId, newMessage);
-
-res.status(201).json(newMessage);
-            } catch (error) {
-        console.log("Error in send messsage controller:", error.message);
-        res.status(500).json({error:"Internal server error"});
+      if (existingMessage) {
+        return res.status(200).json(existingMessage);
+      }
     }
-}
+
+    let imageUrl;
+
+    if (image) {
+      const uploadResponse = await cloudinary.uploader.upload(image);
+      imageUrl = uploadResponse.secure_url;
+    }
+
+    const newMessage = new Message({
+      senderId,
+      receiverId,
+      chatType: "direct",
+      text,
+      clientMessageId: clientMessageId || undefined,
+      image: imageUrl,
+      seen: false,
+    });
+
+    await newMessage.save();
+    emitDirectMessage(receiverId, newMessage);
+
+    return res.status(201).json(newMessage);
+  } catch (error) {
+    console.error("Error in sendMessage controller:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
 
 export const markMessagesAsSeen = async (req, res) => {
   try {
