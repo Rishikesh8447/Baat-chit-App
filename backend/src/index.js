@@ -36,6 +36,16 @@ app.use(
   })
 );
 
+if (env.nodeEnv === "production") {
+  console.log(`Serving frontend static files from: ${frontendDistPath}`);
+  console.log(`Serving React app entry from: ${frontendIndexPath}`);
+  app.use(
+    express.static(frontendDistPath, {
+      index: false,
+    })
+  );
+}
+
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/groups", groupRoutes);
@@ -44,10 +54,8 @@ if (env.enableE2ETests) {
 }
 
 if (env.nodeEnv === "production") {
-  console.log(`Serving frontend static files from: ${frontendDistPath}`);
-  app.use(express.static(frontendDistPath));
-
   app.get(/^(?!\/api).*/, (req, res) => {
+    console.log(`Serving frontend for route: ${req.originalUrl}`);
     return res.sendFile(frontendIndexPath);
   });
 }
