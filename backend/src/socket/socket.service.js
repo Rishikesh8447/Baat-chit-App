@@ -26,7 +26,8 @@ export const emitToUsers = (userIds = [], event, payload, { excludeUserIds = [] 
 
 export const emitOnlineUsers = async () => {
   if (!ioInstance) return;
-  ioInstance.emit("getOnlineUsers", await getOnlineUserIds());
+  const onlineUsers = await getOnlineUserIds();
+  ioInstance.emit("onlineUsers", onlineUsers);
 };
 
 export const emitDirectMessage = (receiverId, message) =>

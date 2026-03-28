@@ -126,6 +126,7 @@ export const useAuthStore = create((set, get) => ({
     if (existingSocket?.connected) return;
 
     if (existingSocket) {
+      existingSocket.off("onlineUsers");
       existingSocket.off("getOnlineUsers");
       existingSocket.off("connect");
       existingSocket.off("disconnect");
@@ -192,15 +193,19 @@ export const useAuthStore = create((set, get) => ({
       });
     });
 
-    socket.on("getOnlineUsers", (userIds) => {
-      set({ onlineUsers: userIds });
-    });
+    const handleOnlineUsers = (userIds) => {
+      set({ onlineUsers: Array.isArray(userIds) ? userIds : [] });
+    };
+
+    socket.on("onlineUsers", handleOnlineUsers);
+    socket.on("getOnlineUsers", handleOnlineUsers);
 
     socket.connect();
   },
   disconnectSocket: () => {
     const socket = get().socket;
     if (socket) {
+      socket.off("onlineUsers");
       socket.off("getOnlineUsers");
       socket.off("connect");
       socket.off("disconnect");

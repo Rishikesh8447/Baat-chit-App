@@ -92,9 +92,11 @@ const ChatHeader = () => {
                       ? "Online"
                       : "Offline"}
                 </p>
-                <p data-testid="connection-status" className="text-xs opacity-70">
-                  Connection: {connectionLabel}
-                </p>
+                {socketStatus !== "online" && (
+                  <p data-testid="connection-status" className="text-xs opacity-70">
+                    Connection: {connectionLabel}
+                  </p>
+                )}
               </div>
             )}
           </div>
