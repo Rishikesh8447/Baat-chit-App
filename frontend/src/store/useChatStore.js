@@ -142,6 +142,11 @@ const buildOptimisticMessage = ({ authUser, selectedUser, selectedGroup, text, i
   _isOptimistic: true,
 });
 
+const normalizeIncomingMessage = (message, overrides = {}) => ({
+  ...normalizeMessage(message),
+  ...overrides,
+});
+
 export const useChatStore = create((set, get) => ({
   messages: [],
   users: [],
@@ -548,9 +553,10 @@ export const useChatStore = create((set, get) => ({
   editMessage: async (messageId, text) => {
     try {
       const res = await axiosInstance.patch(`/messages/${messageId}`, { text });
+      const updatedMessage = normalizeIncomingMessage(res.data);
       set((state) => ({
         messages: state.messages.map((message) =>
-          message._id === messageId ? res.data : message
+          message._id === messageId ? updatedMessage : message
         ),
       }));
       get().getUsers(true);
@@ -561,9 +567,10 @@ export const useChatStore = create((set, get) => ({
   deleteMessage: async (messageId) => {
     try {
       const res = await axiosInstance.delete(`/messages/${messageId}`);
+      const deletedMessage = normalizeIncomingMessage(res.data);
       set((state) => ({
         messages: state.messages.map((message) =>
-          message._id === messageId ? res.data : message
+          message._id === messageId ? deletedMessage : message
         ),
       }));
       get().getUsers(true);
@@ -644,50 +651,52 @@ export const useChatStore = create((set, get) => ({
     socket.off("groupRemoved");
     socket.off("groupDeleted");
     socket.on("newMessage", (newMessage) => {
+      const normalizedMessage = normalizeIncomingMessage(newMessage);
       const selectedUser = get().selectedUser;
-      const isFromOpenedChat = selectedUser?._id === newMessage.senderId;
+      const isFromOpenedChat = selectedUser?._id === normalizedMessage.senderId;
 
       set((state) => ({
         messages: isFromOpenedChat
-          ? mergeMessages(state.messages, [newMessage], "append")
+          ? mergeMessages(state.messages, [normalizedMessage], "append")
           : state.messages,
         typingIndicator:
           state.typingIndicator?.chatType === "direct" &&
-          state.typingIndicator?.senderId === newMessage.senderId
+          state.typingIndicator?.senderId === normalizedMessage.senderId
             ? null
             : state.typingIndicator,
         users: state.users.map((user) => {
-          if (user._id !== newMessage.senderId) return user;
+          if (user._id !== normalizedMessage.senderId) return user;
 
           return {
             ...user,
-            lastMessage: newMessage.text?.trim()
-              ? newMessage.text
-              : newMessage.image
+            lastMessage: normalizedMessage.text?.trim()
+              ? normalizedMessage.text
+              : normalizedMessage.image
                 ? "Image"
                 : "",
-            lastMessageAt: newMessage.createdAt,
+            lastMessageAt: normalizedMessage.createdAt,
             unreadCount: isFromOpenedChat ? 0 : (user.unreadCount || 0) + 1,
           };
         }),
       }));
 
       if (isFromOpenedChat) {
-        get().markMessagesAsSeen(newMessage.senderId);
+        get().markMessagesAsSeen(normalizedMessage.senderId);
       }
     });
 
     socket.on("newGroupMessage", (newMessage) => {
+      const normalizedMessage = normalizeIncomingMessage(newMessage);
       const { selectedGroup, groups } = get();
-      const isFromOpenedGroup = selectedGroup?._id === newMessage.groupId;
-      const group = groups.find((g) => g._id === newMessage.groupId);
+      const isFromOpenedGroup = selectedGroup?._id === normalizedMessage.groupId;
+      const group = groups.find((g) => g._id === normalizedMessage.groupId);
 
       if (isFromOpenedGroup) {
         set((state) => ({
-          messages: mergeMessages(state.messages, [newMessage], "append"),
+          messages: mergeMessages(state.messages, [normalizedMessage], "append"),
           typingIndicator:
             state.typingIndicator?.chatType === "group" &&
-            state.typingIndicator?.senderId === newMessage.senderId
+            state.typingIndicator?.senderId === normalizedMessage.senderId
               ? null
               : state.typingIndicator,
         }));
@@ -697,18 +706,20 @@ export const useChatStore = create((set, get) => ({
     });
 
     socket.on("messageUpdated", (updatedMessage) => {
+      const normalizedMessage = normalizeIncomingMessage(updatedMessage);
       set((state) => ({
         messages: state.messages.map((message) =>
-          message._id === updatedMessage._id ? updatedMessage : message
+          message._id === normalizedMessage._id ? normalizedMessage : message
         ),
       }));
       get().getUsers(true);
     });
 
     socket.on("messageDeleted", (deletedMessage) => {
+      const normalizedMessage = normalizeIncomingMessage(deletedMessage);
       set((state) => ({
         messages: state.messages.map((message) =>
-          message._id === deletedMessage._id ? deletedMessage : message
+          message._id === normalizedMessage._id ? normalizedMessage : message
         ),
       }));
       get().getUsers(true);

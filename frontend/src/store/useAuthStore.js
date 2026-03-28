@@ -4,7 +4,9 @@ import toast from "react-hot-toast";
 import { io } from "socket.io-client";
 import { getApiErrorMessage } from "../lib/errors.js";
 
-const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:5001" : "/";
+const SOCKET_BASE_URL =
+  (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "") ||
+  (typeof window !== "undefined" ? window.location.origin : "");
 
 export const useAuthStore = create((set, get) => ({
   authUser: null,
@@ -134,7 +136,7 @@ export const useAuthStore = create((set, get) => ({
       existingSocket.disconnect();
     }
 
-    const socket = io(BASE_URL, {
+    const socket = io(SOCKET_BASE_URL, {
       autoConnect: false,
       withCredentials: true,
       reconnection: true,

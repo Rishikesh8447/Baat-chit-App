@@ -50,7 +50,7 @@ export const searchDirectMessages = async (req, res) => {
   try {
     const myId = req.user._id;
     const { id: otherUserId } = req.params;
-    const { q, limit, mode } = req.query;
+    const { q, limit, mode } = req.validatedQuery || req.query;
 
     const results = await searchMessagesInChat({
       chatId: buildDirectChatId(myId, otherUserId),
@@ -70,14 +70,15 @@ export const getMessages=async(req,res)=>{
     try {
      const {id:UserToChatId}  =req.params 
      const myId=req.user._id;
+     const query = req.validatedQuery || req.query;
 
      const result = await getDirectMessagesPage({
         currentUserId: myId,
         otherUserId: UserToChatId,
-        query: req.query,
+        query,
      });
 
-     res.status(200).json(formatMessageListResponse(result, req.query))
+     res.status(200).json(formatMessageListResponse(result, query))
     } catch (error) {
         console.log("Error in getMessage Controller:",error.message);
         res.status(500).json({error:"Internal server error"});

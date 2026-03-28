@@ -36,7 +36,7 @@ if (env.nodeEnv === "production") {
 }
 
 const apiCors = cors({
-  origin: allowedOrigins,
+  origin: allowedOrigins.length ? allowedOrigins : true,
   credentials: true,
 });
 

@@ -17,7 +17,7 @@ export const validate = (validator) => (req, res, next) => {
 
   if (result.value?.body) req.body = result.value.body;
   if (result.value?.params) req.params = result.value.params;
-  if (result.value?.query) req.query = result.value.query;
+  if (result.value?.query) req.validatedQuery = result.value.query;
 
   return next();
 };

@@ -226,10 +226,12 @@ const ChatContainer = () => {
     }
   };
 
+  const isOwnMessage = (message) => String(message?.senderId) === String(authUser?._id);
+
   const getAvatarForMessage = (message) => {
-    if (message.senderId === authUser._id) return authUser.profilePic || "/avatar.png";
+    if (isOwnMessage(message)) return authUser.profilePic || "/avatar.png";
     if (selectedGroup?.members?.length) {
-      const sender = selectedGroup.members.find((member) => member._id === message.senderId);
+      const sender = selectedGroup.members.find((member) => String(member._id) === String(message.senderId));
       return sender?.profilePic || "/avatar.png";
     }
     return selectedUser?.profilePic || "/avatar.png";
@@ -424,7 +426,7 @@ const ChatContainer = () => {
                   : ""
             }`}
           >
-            <div className={`chat ${message.senderId === authUser._id ? "chat-end" : "chat-start"}`}>
+            <div className={`chat ${isOwnMessage(message) ? "chat-end" : "chat-start"}`}>
             <div className=" chat-image avatar">
               <div className="size-10 rounded-full border">
                 <img
@@ -437,7 +439,7 @@ const ChatContainer = () => {
               <time className="text-xs opacity-50 ml-1">
                 {formatMessageTime(message.createdAt)}
               </time>
-              {message.senderId === authUser._id && message.deliveryStatus !== "sent" && (
+              {isOwnMessage(message) && message.deliveryStatus !== "sent" && (
                 <span className="text-xs opacity-60 ml-1">{getDeliveryStatusLabel(message)}</span>
               )}
               {message.isEdited && !message.isDeleted && (
@@ -493,14 +495,14 @@ const ChatContainer = () => {
             </div>
             </div>
 
-            {message.senderId === authUser._id &&
+            {isOwnMessage(message) &&
               !message.isDeleted &&
               editingMessageId !== message._id &&
               !message._isOptimistic &&
               message.deliveryStatus === "sent" && (
               <div
                 className={`mt-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity ${
-                  message.senderId === authUser._id ? "justify-end" : "justify-start"
+                  isOwnMessage(message) ? "justify-end" : "justify-start"
                 }`}
               >
                 {!!message.text && (

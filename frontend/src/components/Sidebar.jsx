@@ -53,6 +53,7 @@ const Sidebar = () => {
   const filteredUsers = showOnlineOnly
     ? users.filter((user) => onlineUsers.includes(user._id))
     : users;
+  const getPresenceLabel = (userId) => (onlineUsers.includes(userId) ? "Online" : "Offline");
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) return;
@@ -133,9 +134,7 @@ const Sidebar = () => {
             {/* User info - only visible on larger screens */}
             <div className="hidden lg:block text-left min-w-0 flex-1">
               <div className="font-medium truncate">{user.fullName}</div>
-              <div className="text-sm text-zinc-400 truncate">
-                {user.lastMessage || (onlineUsers.includes(user._id) ? "Online" : "Offline")}
-              </div>
+              <div className="text-sm text-zinc-400 truncate">{getPresenceLabel(user._id)}</div>
             </div>
             {!!user.unreadCount && (
               <span className="badge badge-primary badge-sm ml-auto">{user.unreadCount}</span>

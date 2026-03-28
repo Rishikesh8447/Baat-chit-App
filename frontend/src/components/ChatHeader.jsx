@@ -76,7 +76,9 @@ const ChatHeader = () => {
                 <p className="text-xs opacity-70">
                   Admin: {selectedGroup.admin?.fullName || "Group creator"}
                 </p>
-                <p data-testid="connection-status" className="text-xs opacity-70">{connectionLabel}</p>
+                <p data-testid="connection-status" className="text-xs opacity-70">
+                  Connection: {connectionLabel}
+                </p>
                 {typingIndicator?.chatType === "group" && typingIndicator?.groupId === selectedGroup._id && (
                   <p className="text-xs text-primary">{typingIndicator.senderName} is typing...</p>
                 )}
@@ -90,7 +92,9 @@ const ChatHeader = () => {
                       ? "Online"
                       : "Offline"}
                 </p>
-                <p data-testid="connection-status" className="text-xs opacity-70">{connectionLabel}</p>
+                <p data-testid="connection-status" className="text-xs opacity-70">
+                  Connection: {connectionLabel}
+                </p>
               </div>
             )}
           </div>

@@ -60,14 +60,15 @@ export const getGroupMessages = async (req, res) => {
   try {
     const myId = req.user._id;
     const { groupId } = req.params;
+    const query = req.validatedQuery || req.query;
 
     const group = await Group.findOne({ _id: groupId, members: myId }).select("_id");
     if (!group) {
       return res.status(403).json({ message: "Not authorized for this group" });
     }
 
-    const result = await getGroupMessagesPage({ groupId, query: req.query });
-    return res.status(200).json(formatMessageListResponse(result, req.query));
+    const result = await getGroupMessagesPage({ groupId, query });
+    return res.status(200).json(formatMessageListResponse(result, query));
   } catch (error) {
     console.error("Error in getGroupMessages:", error.message);
     return res.status(500).json({ message: "Internal server error" });
@@ -78,7 +79,7 @@ export const searchGroupMessages = async (req, res) => {
   try {
     const myId = req.user._id;
     const { groupId } = req.params;
-    const { q, limit, mode } = req.query;
+    const { q, limit, mode } = req.validatedQuery || req.query;
 
     const group = await Group.findOne({ _id: groupId, members: myId }).select("_id");
     if (!group) {
