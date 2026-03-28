@@ -17,7 +17,14 @@ const MessageInput = () => {
     selectedGroupId: null,
     selectedUserId: null,
   });
-  const { sendMessage, selectedUser, selectedGroup, isSendingMessage } = useChatStore();
+  const {
+    sendMessage,
+    selectedUser,
+    selectedGroup,
+    isSendingMessage,
+    replyToMessage,
+    clearReplyToMessage,
+  } = useChatStore();
   const { authUser, socket } = useAuthStore();
   const canSend = Boolean(text.trim() || imagePreview);
 
@@ -162,6 +169,22 @@ const MessageInput = () => {
               type="button"
             >
               <X className="size-3" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {replyToMessage && (
+        <div className="mb-3 rounded-xl border border-base-300 bg-base-200/60 px-3 py-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-base-content/70">Replying to message</p>
+              <p className="truncate text-sm">
+                {replyToMessage.text?.trim() || (replyToMessage.image ? "Image attachment" : "Message")}
+              </p>
+            </div>
+            <button type="button" className="btn btn-ghost btn-xs" onClick={clearReplyToMessage}>
+              <X className="size-4" />
             </button>
           </div>
         </div>

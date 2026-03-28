@@ -11,6 +11,16 @@ import {
   emitGroupUpdated,
 } from "../socket/socket.service.js";
 
+const buildReplyToPayload = (replyTo) => {
+  if (!replyTo?.messageId) return undefined;
+
+  return {
+    messageId: replyTo.messageId,
+    text: replyTo.text || "",
+    senderId: replyTo.senderId || undefined,
+  };
+};
+
 export const createGroup = async (req, res) => {
   try {
     const { name, memberIds = [] } = req.body;
@@ -103,7 +113,7 @@ export const searchGroupMessages = async (req, res) => {
 export const sendGroupMessage = async (req, res) => {
   try {
     const { groupId } = req.params;
-    const { text, img, image: imageFromBody, clientMessageId } = req.body;
+    const { text, img, image: imageFromBody, clientMessageId, replyTo } = req.body;
     const senderId = req.user._id;
     const image = imageFromBody || img;
 
@@ -134,9 +144,11 @@ export const sendGroupMessage = async (req, res) => {
       groupId,
       chatType: "group",
       text,
+      replyTo: buildReplyToPayload(replyTo),
       clientMessageId: clientMessageId || undefined,
       image: imageUrl,
       seen: false,
+      status: "sent",
     });
 
     emitGroupMessage(group.members, newMessage);

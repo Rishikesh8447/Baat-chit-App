@@ -103,3 +103,15 @@ export const getOnlineUserIds = async () => {
   await redis.zRemRangeByScore(onlineUsersKey, 0, cutoff);
   return redis.zRange(onlineUsersKey, 0, -1);
 };
+
+export const isUserOnline = async (userId) => {
+  const normalizedUserId = normalizeUserId(userId);
+  if (!normalizedUserId) return false;
+
+  const redis = getRedisClient();
+  if (!redis) {
+    return localUserSocketMap.has(normalizedUserId);
+  }
+
+  return (await redis.sCard(userSocketsKey(normalizedUserId))) > 0;
+};

@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 const MAX_TEXT_LENGTH = 2000;
 const MAX_NAME_LENGTH = 80;
 const MAX_BASE64_IMAGE_LENGTH = 10 * 1024 * 1024;
+const MAX_REPLY_PREVIEW_LENGTH = 240;
 
 const trimString = (value) => (typeof value === "string" ? value.trim() : "");
 const normalizeEmail = (value) => trimString(value).toLowerCase();
@@ -10,6 +11,33 @@ const isNonEmptyString = (value) => typeof value === "string" && value.trim().le
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value));
 const sanitizeText = (value) => trimString(value).replace(/\s+/g, " ");
 const sanitizeClientMessageId = (value) => trimString(value).slice(0, 100);
+
+const sanitizeReplyTo = (value, details) => {
+  if (!value) return null;
+  if (typeof value !== "object" || Array.isArray(value)) {
+    details.push("replyTo must be an object");
+    return null;
+  }
+
+  const messageId = value.messageId ? String(value.messageId) : "";
+  const senderId = value.senderId ? String(value.senderId) : "";
+  const text = sanitizeText(value.text || "").slice(0, MAX_REPLY_PREVIEW_LENGTH);
+
+  if (!isValidObjectId(messageId)) {
+    details.push("replyTo.messageId must be a valid id");
+  }
+  if (senderId && !isValidObjectId(senderId)) {
+    details.push("replyTo.senderId must be a valid id");
+  }
+
+  if (details.length) return null;
+
+  return {
+    messageId,
+    text,
+    ...(senderId ? { senderId } : {}),
+  };
+};
 
 const validateImagePayload = (value, fieldName, details) => {
   if (!value) return "";
@@ -196,6 +224,7 @@ export const validateSendMessage = (req) => {
   const text = sanitizeText(req.body?.text || "");
   const image = validateImagePayload(req.body?.image || req.body?.img, "image", details);
   const clientMessageId = sanitizeClientMessageId(req.body?.clientMessageId);
+  const replyTo = sanitizeReplyTo(req.body?.replyTo, details);
 
   if (!isValidObjectId(req.params?.id)) details.push("id must be a valid id");
   if (!text && !image) details.push("text or image is required");
@@ -210,7 +239,7 @@ export const validateSendMessage = (req) => {
     ok: true,
     value: {
       params: { id: String(req.params.id) },
-      body: { text, image, ...(clientMessageId ? { clientMessageId } : {}) },
+      body: { text, image, ...(clientMessageId ? { clientMessageId } : {}), ...(replyTo ? { replyTo } : {}) },
     },
   };
 };
@@ -267,6 +296,7 @@ export const validateGroupMessage = (req) => {
   const text = sanitizeText(req.body?.text || "");
   const image = validateImagePayload(req.body?.image || req.body?.img, "image", details);
   const clientMessageId = sanitizeClientMessageId(req.body?.clientMessageId);
+  const replyTo = sanitizeReplyTo(req.body?.replyTo, details);
 
   if (!isValidObjectId(req.params?.groupId)) details.push("groupId must be a valid id");
   if (!text && !image) details.push("text or image is required");
@@ -281,7 +311,7 @@ export const validateGroupMessage = (req) => {
     ok: true,
     value: {
       params: { groupId: String(req.params.groupId) },
-      body: { text, image, ...(clientMessageId ? { clientMessageId } : {}) },
+      body: { text, image, ...(clientMessageId ? { clientMessageId } : {}), ...(replyTo ? { replyTo } : {}) },
     },
   };
 };

@@ -19,6 +19,10 @@ import mongoose from "mongoose";
         type:String,
         default:"",
     },
+    lastSeen: {
+        type: Date,
+        default: null,
+    },
     resetPasswordToken: {
         type: String,
         default: null,

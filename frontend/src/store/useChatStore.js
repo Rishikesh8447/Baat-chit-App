@@ -31,6 +31,19 @@ const normalizeMessage = (message) => ({
       ? message.groupId._id
       : message?.groupId,
   clientMessageId: message?.clientMessageId || null,
+  replyTo: message?.replyTo
+    ? {
+        messageId: message.replyTo.messageId || null,
+        text: message.replyTo.text || "",
+        senderId:
+          typeof message.replyTo.senderId === "object" && message.replyTo.senderId?._id
+            ? message.replyTo.senderId._id
+            : message.replyTo.senderId || null,
+      }
+    : null,
+  status: message?.status || (message?.seen ? "read" : message?.deliveredAt ? "delivered" : "sent"),
+  deliveredAt: message?.deliveredAt || null,
+  readAt: message?.readAt || message?.seenAt || null,
   deliveryStatus: message?.deliveryStatus || "sent",
   _retryCount: message?._retryCount || 0,
   _isOptimistic: Boolean(message?._isOptimistic),
@@ -131,8 +144,10 @@ const buildOptimisticMessage = ({ authUser, selectedUser, selectedGroup, text, i
   groupId: selectedGroup?._id || null,
   chatType: selectedGroup?._id ? "group" : "direct",
   text,
+  replyTo: null,
   image: image || "",
   seen: false,
+  status: "sent",
   isEdited: false,
   isDeleted: false,
   createdAt: new Date().toISOString(),
@@ -153,6 +168,7 @@ export const useChatStore = create((set, get) => ({
   groups: [],
   selectedUser: null,
   selectedGroup: null,
+  replyToMessage: null,
   isUsersLoading: false,
   isGroupsLoading: false,
   isCreatingGroup: false,
@@ -372,7 +388,9 @@ export const useChatStore = create((set, get) => ({
       await axiosInstance.put(`/messages/seen/${userId}`);
       set((state) => ({
         messages: state.messages.map((msg) =>
-          msg.senderId === userId ? { ...msg, seen: true } : msg
+          msg.senderId === userId
+            ? { ...msg, seen: true, status: "read", readAt: new Date().toISOString() }
+            : msg
         ),
         users: state.users.map((user) =>
           user._id === userId ? { ...user, unreadCount: 0 } : user
@@ -390,6 +408,7 @@ export const useChatStore = create((set, get) => ({
     const text = messageData.text?.trim() || "";
     const image = messageData.image || messageData.img || "";
     const clientMessageId = createClientMessageId();
+    const replyToMessage = get().replyToMessage;
     const optimisticMessage = buildOptimisticMessage({
       authUser,
       selectedUser,
@@ -398,6 +417,13 @@ export const useChatStore = create((set, get) => ({
       image,
       clientMessageId,
     });
+    optimisticMessage.replyTo = replyToMessage
+      ? {
+          messageId: replyToMessage._id,
+          text: replyToMessage.text?.trim() || (replyToMessage.image ? "Image attachment" : "Message"),
+          senderId: replyToMessage.senderId,
+        }
+      : null;
     const queueEntry = {
       clientMessageId,
       chatType: selectedGroup?._id ? "group" : "direct",
@@ -411,6 +437,17 @@ export const useChatStore = create((set, get) => ({
         text,
         image,
         clientMessageId,
+        ...(replyToMessage
+          ? {
+              replyTo: {
+                messageId: replyToMessage._id,
+                text:
+                  replyToMessage.text?.trim() ||
+                  (replyToMessage.image ? "Image attachment" : "Message"),
+                senderId: replyToMessage.senderId,
+              },
+            }
+          : {}),
       },
       optimisticMessage,
       attempts: 0,
@@ -423,6 +460,7 @@ export const useChatStore = create((set, get) => ({
         ...state.pendingOutgoingMessages,
         [clientMessageId]: queueEntry,
       },
+      replyToMessage: null,
       users: selectedUser
         ? state.users.map((user) =>
             user._id === selectedUser._id
@@ -650,6 +688,7 @@ export const useChatStore = create((set, get) => ({
     socket.off("groupUpdated");
     socket.off("groupRemoved");
     socket.off("groupDeleted");
+    socket.off("presenceUpdated");
     socket.on("newMessage", (newMessage) => {
       const normalizedMessage = normalizeIncomingMessage(newMessage);
       const selectedUser = get().selectedUser;
@@ -817,6 +856,18 @@ export const useChatStore = create((set, get) => ({
       }));
       toast("A group was deleted");
     });
+
+    socket.on("presenceUpdated", ({ userId, online, lastSeen }) => {
+      set((state) => ({
+        users: state.users.map((user) =>
+          user._id === userId ? { ...user, lastSeen: lastSeen || user.lastSeen || null } : user
+        ),
+        selectedUser:
+          state.selectedUser?._id === userId
+            ? { ...state.selectedUser, lastSeen: lastSeen || state.selectedUser.lastSeen || null }
+            : state.selectedUser,
+      }));
+    });
   },
 
   unsubscribeFromMessages: () => {
@@ -832,12 +883,14 @@ export const useChatStore = create((set, get) => ({
     socket.off("groupUpdated");
     socket.off("groupRemoved");
     socket.off("groupDeleted");
+    socket.off("presenceUpdated");
   },
 
   setSelectedUser: (selectedUser) =>
     set({
       selectedUser,
       selectedGroup: null,
+      replyToMessage: null,
       typingIndicator: null,
       messages: [],
       messagePagination: emptyPagination,
@@ -847,11 +900,14 @@ export const useChatStore = create((set, get) => ({
     set({
       selectedGroup,
       selectedUser: null,
+      replyToMessage: null,
       typingIndicator: null,
       messages: [],
       messagePagination: emptyPagination,
       searchResults: [],
     }),
+  setReplyToMessage: (replyToMessage) => set({ replyToMessage }),
+  clearReplyToMessage: () => set({ replyToMessage: null }),
 }));
 
 if (typeof window !== "undefined" && !window[retryOnReconnectListenerKey]) {

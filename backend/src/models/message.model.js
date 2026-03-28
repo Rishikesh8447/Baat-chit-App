@@ -39,6 +39,23 @@ const messageSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    replyTo: {
+      messageId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Message",
+        default: null,
+      },
+      text: {
+        type: String,
+        trim: true,
+        default: "",
+      },
+      senderId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+    },
     clientMessageId: {
       type: String,
       trim: true,
@@ -53,6 +70,19 @@ const messageSchema = new mongoose.Schema(
       default: false,
     },
     seenAt: {
+      type: Date,
+      default: null,
+    },
+    status: {
+      type: String,
+      enum: ["sent", "delivered", "read"],
+      default: "sent",
+    },
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
+    readAt: {
       type: Date,
       default: null,
     },

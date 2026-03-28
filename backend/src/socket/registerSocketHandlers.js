@@ -1,5 +1,12 @@
-import { emitOnlineUsers, emitStopTypingEvent, emitTypingEvent, initializeSocketService } from "./socket.service.js";
-import { getUserRoom, refreshUserSocket, registerUserSocket, unregisterSocket } from "./state.js";
+import User from "../models/user.model.js";
+import {
+  emitOnlineUsers,
+  emitPresenceUpdated,
+  emitStopTypingEvent,
+  emitTypingEvent,
+  initializeSocketService,
+} from "./socket.service.js";
+import { getUserRoom, isUserOnline, refreshUserSocket, registerUserSocket, unregisterSocket } from "./state.js";
 
 const PRESENCE_REFRESH_INTERVAL_MS = 60_000;
 
@@ -16,7 +23,15 @@ export const registerSocketHandlers = (io) => {
     if (normalizedUserId && normalizedUserId !== "undefined") {
       socket.join(getUserRoom(normalizedUserId));
       registerUserSocket(normalizedUserId, socket.id)
-        .then(() => emitOnlineUsers())
+        .then(async () => {
+          const user = await User.findById(normalizedUserId).select("lastSeen");
+          emitPresenceUpdated({
+            userId: normalizedUserId,
+            online: true,
+            lastSeen: user?.lastSeen || null,
+          });
+          await emitOnlineUsers();
+        })
         .catch((error) => {
           console.error("Failed to register socket presence:", error);
         });
@@ -44,7 +59,22 @@ export const registerSocketHandlers = (io) => {
       }
 
       unregisterSocket(socket.id, normalizedUserId)
-        .then(() => emitOnlineUsers())
+        .then(async () => {
+          const stillOnline = await isUserOnline(normalizedUserId);
+          let lastSeen = null;
+
+          if (!stillOnline && normalizedUserId && normalizedUserId !== "undefined") {
+            lastSeen = new Date();
+            await User.findByIdAndUpdate(normalizedUserId, { lastSeen });
+          }
+
+          emitPresenceUpdated({
+            userId: normalizedUserId,
+            online: stillOnline,
+            lastSeen,
+          });
+          await emitOnlineUsers();
+        })
         .catch((error) => {
           console.error("Failed to unregister socket presence:", error);
         });

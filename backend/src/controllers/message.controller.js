@@ -14,6 +14,16 @@ import {
   emitMessageDeleted,
   emitMessageUpdated,
 } from "../socket/socket.service.js";
+
+const buildReplyToPayload = (replyTo) => {
+  if (!replyTo?.messageId) return undefined;
+
+  return {
+    messageId: replyTo.messageId,
+    text: replyTo.text || "",
+    senderId: replyTo.senderId || undefined,
+  };
+};
 export const getUsersForSidebar=async(req,res)=>{
 try {
     const LoggedInUserId=req.user._id;
@@ -86,7 +96,7 @@ export const getMessages = async (req, res) => {
 };
 export const sendMessage = async (req, res) => {
   try {
-    const { text, img, image: imageFromBody, clientMessageId } = req.body;
+    const { text, img, image: imageFromBody, clientMessageId, replyTo } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
     const image = imageFromBody || img;
@@ -114,13 +124,21 @@ export const sendMessage = async (req, res) => {
       receiverId,
       chatType: "direct",
       text,
+      replyTo: buildReplyToPayload(replyTo),
       clientMessageId: clientMessageId || undefined,
       image: imageUrl,
       seen: false,
+      status: "sent",
     });
 
     await newMessage.save();
-    emitDirectMessage(receiverId, newMessage);
+
+    if (emitDirectMessage(receiverId, newMessage)) {
+      newMessage.status = "delivered";
+      newMessage.deliveredAt = new Date();
+      await newMessage.save();
+      await emitMessageUpdated(newMessage);
+    }
 
     return res.status(201).json(newMessage);
   } catch (error) {
@@ -133,17 +151,28 @@ export const markMessagesAsSeen = async (req, res) => {
   try {
     const myId = req.user._id;
     const { id: senderId } = req.params;
+    const unreadMessages = await Message.find({
+      senderId,
+      receiverId: myId,
+      seen: { $ne: true },
+    });
+
+    if (!unreadMessages.length) {
+      return res.status(200).json({ updatedCount: 0 });
+    }
+
+    const readAt = new Date();
+    const messageIds = unreadMessages.map((message) => message._id);
 
     const result = await Message.updateMany(
+      { _id: { $in: messageIds } },
       {
-        senderId,
-        receiverId: myId,
-        seen: { $ne: true },
-      },
-      {
-        $set: { seen: true, seenAt: new Date() },
+        $set: { seen: true, seenAt: readAt, readAt, status: "read" },
       }
     );
+
+    const updatedMessages = await Message.find({ _id: { $in: messageIds } });
+    await Promise.all(updatedMessages.map((message) => emitMessageUpdated(message)));
 
     res.status(200).json({ updatedCount: result.modifiedCount });
   } catch (error) {

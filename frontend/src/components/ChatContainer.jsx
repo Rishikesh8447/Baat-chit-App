@@ -6,7 +6,7 @@ import MessageInput from "./MessageInput";
 import MessageSkeleton from "./skeletons/MessageSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
 import { formatMessageTime } from "../lib/utils";
-import { Check, ChevronDown, ChevronUp, Pencil, Search, Trash2, X } from "lucide-react";
+import { Check, CheckCheck, ChevronDown, ChevronUp, CornerUpLeft, Pencil, Search, Trash2, X } from "lucide-react";
 
 const ChatContainer = () => {
   const {
@@ -28,6 +28,7 @@ const ChatContainer = () => {
     searchResults,
     clearSearchResults,
     retryPendingMessages,
+    setReplyToMessage,
   } = useChatStore();
   const { authUser, socketRecoveryKey, socketStatus } = useAuthStore();
   const messageEndRef = useRef(null);
@@ -262,6 +263,25 @@ const ChatContainer = () => {
     return "";
   };
 
+  const getReplyPreview = (message) =>
+    message.replyTo?.text?.trim() || "Original message";
+
+  const renderDeliveryStatus = (message) => {
+    if (!isOwnMessage(message) || message.chatType !== "direct" || message.deliveryStatus !== "sent") {
+      return null;
+    }
+
+    if (message.status === "read") {
+      return <CheckCheck className="size-3.5 text-sky-500" />;
+    }
+
+    if (message.status === "delivered") {
+      return <CheckCheck className="size-3.5 opacity-70" />;
+    }
+
+    return <Check className="size-3.5 opacity-70" />;
+  };
+
   if (isMessagesLoading) {
     return (
       <div className="flex-1 flex flex-col overflow-auto">
@@ -442,6 +462,7 @@ const ChatContainer = () => {
               {isOwnMessage(message) && message.deliveryStatus !== "sent" && (
                 <span className="text-xs opacity-60 ml-1">{getDeliveryStatusLabel(message)}</span>
               )}
+              {renderDeliveryStatus(message)}
               {message.isEdited && !message.isDeleted && (
                 <span className="text-xs opacity-60 ml-1">(edited)</span>
               )}
@@ -454,6 +475,12 @@ const ChatContainer = () => {
                 <p className="italic opacity-70">This message was deleted</p>
               ) : (
                 <>
+              {message.replyTo?.messageId && (
+                <div className="mb-2 rounded-lg border border-base-300/70 bg-base-100/40 px-3 py-2 text-xs">
+                  <p className="font-medium opacity-70">Reply</p>
+                  <p className="truncate">{getReplyPreview(message)}</p>
+                </div>
+              )}
               {message.image && (
                 <img
                   src={message.image}
@@ -517,11 +544,31 @@ const ChatContainer = () => {
                 )}
                 <button
                   type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setReplyToMessage(message)}
+                  title="Reply to message"
+                >
+                  <CornerUpLeft className="size-3.5" />
+                </button>
+                <button
+                  type="button"
                   className="btn btn-ghost btn-xs text-error"
                   onClick={() => handleDelete(message._id)}
                   title="Delete message"
                 >
                   <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            )}
+            {!isOwnMessage(message) && !message.isDeleted && (
+              <div className="mt-1 flex justify-start gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => setReplyToMessage(message)}
+                  title="Reply to message"
+                >
+                  <CornerUpLeft className="size-3.5" />
                 </button>
               </div>
             )}

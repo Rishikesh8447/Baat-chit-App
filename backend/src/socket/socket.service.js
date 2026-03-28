@@ -30,6 +30,15 @@ export const emitOnlineUsers = async () => {
   ioInstance.emit("onlineUsers", onlineUsers);
 };
 
+export const emitPresenceUpdated = ({ userId, online, lastSeen = null }) => {
+  if (!ioInstance || !userId) return;
+  ioInstance.emit("presenceUpdated", {
+    userId: String(userId),
+    online: Boolean(online),
+    lastSeen,
+  });
+};
+
 export const emitDirectMessage = (receiverId, message) =>
   emitToUser(receiverId, "newMessage", message);
 

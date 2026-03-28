@@ -32,6 +32,19 @@ const ChatHeader = () => {
         : socketStatus === "connecting"
           ? "Connecting..."
           : "Offline";
+  const formatLastSeen = (lastSeen) => {
+    if (!lastSeen) return "Offline";
+
+    const diffMinutes = Math.max(Math.floor((Date.now() - new Date(lastSeen).getTime()) / 60000), 0);
+    if (diffMinutes < 1) return "Last seen just now";
+    if (diffMinutes < 60) return `Last seen ${diffMinutes} minutes ago`;
+
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `Last seen ${diffHours} hours ago`;
+
+    const diffDays = Math.floor(diffHours / 24);
+    return `Last seen ${diffDays} days ago`;
+  };
 
   const handleLeaveGroup = async () => {
     if (!selectedGroup?._id) return;
@@ -90,7 +103,7 @@ const ChatHeader = () => {
                     ? `${selectedUser.fullName} is typing...`
                     : onlineUsers.includes(selectedUser._id)
                       ? "Online"
-                      : "Offline"}
+                      : formatLastSeen(selectedUser.lastSeen)}
                 </p>
                 {socketStatus !== "online" && (
                   <p data-testid="connection-status" className="text-xs opacity-70">
